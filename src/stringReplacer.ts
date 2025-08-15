@@ -46,45 +46,75 @@ export class StringReplacer {
         document: vscode.TextDocument
     ): Promise<void> {
         const config = ConfigManager.getConfig();
-        const translationEntries: TranslationEntry[] = [];
-        const edits: vscode.WorkspaceEdit = new vscode.WorkspaceEdit();
-
-        // Sort strings by position (reverse order to maintain correct positions during replacement)
-        const sortedStrings = [...strings].sort((a, b) => b.startPosition - a.startPosition);
-
-        for (const str of sortedStrings) {
-            // Generate unique key with file path
-            const baseKey = this.generateKeyWithPath(str.text, document.uri);
-            const uniqueKey = await LocaleManager.generateUniqueKey(baseKey, document.uri);
-            
-            // Create translation entry
-            const translationEntry = LocaleManager.generateTranslations(str.text, uniqueKey);
-            translationEntries.push(translationEntry);
-
-            // Generate replacement text based on context
-            const replacementText = this.generateReplacementText(uniqueKey, str, config);
-
-            // Create text edit
-            const startPos = document.positionAt(str.startPosition);
-            const endPos = document.positionAt(str.endPosition);
-            const range = new vscode.Range(startPos, endPos);
-            
-            edits.replace(document.uri, range, replacementText);
-        }
-
-        // Apply all edits
-        const success = await vscode.workspace.applyEdit(edits);
         
-        if (success) {
-            // Save translations to locale files
-            await LocaleManager.saveTranslations(translationEntries, document.uri);
+        // Show overall progress for the entire extraction process
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: `🌍 Extracting ${strings.length} string(s) to i18n`,
+            cancellable: false
+        }, async (progress) => {
+            const translationEntries: TranslationEntry[] = [];
+            const edits: vscode.WorkspaceEdit = new vscode.WorkspaceEdit();
+
+            // Sort strings by position (reverse order to maintain correct positions during replacement)
+            const sortedStrings = [...strings].sort((a, b) => b.startPosition - a.startPosition);
+
+            for (let i = 0; i < sortedStrings.length; i++) {
+                const str = sortedStrings[i];
+                
+                progress.report({ 
+                    increment: (50 / sortedStrings.length), // First 50% for key generation
+                    message: `Generating key for "${str.text.substring(0, 20)}${str.text.length > 20 ? '...' : ''}"` 
+                });
+
+                // Generate unique key with file path
+                const baseKey = this.generateKeyWithPath(str.text, document.uri);
+                const uniqueKey = await LocaleManager.generateUniqueKey(baseKey, document.uri);
+                
+                // Create translation entry (this will show its own progress for OpenAI)
+                const translationEntry = await LocaleManager.generateTranslations(str.text, uniqueKey);
+                translationEntries.push(translationEntry);
+
+                // Generate replacement text based on context
+                const replacementText = this.generateReplacementText(uniqueKey, str, config);
+
+                // Create text edit
+                const startPos = document.positionAt(str.startPosition);
+                const endPos = document.positionAt(str.endPosition);
+                const range = new vscode.Range(startPos, endPos);
+                
+                edits.replace(document.uri, range, replacementText);
+            }
+
+            progress.report({ 
+                increment: 25, 
+                message: 'Applying text changes...' 
+            });
+
+            // Apply all edits
+            const success = await vscode.workspace.applyEdit(edits);
             
-            vscode.window.showInformationMessage(
-                `Successfully extracted ${strings.length} string(s) and updated locale files!`
-            );
-        } else {
-            throw new Error('Failed to apply text edits');
-        }
+            if (success) {
+                progress.report({ 
+                    increment: 15, 
+                    message: 'Saving translation files...' 
+                });
+                
+                // Save translations to locale files
+                await LocaleManager.saveTranslations(translationEntries, document.uri);
+                
+                progress.report({ 
+                    increment: 10, 
+                    message: '✅ Extraction completed!' 
+                });
+                
+                vscode.window.showInformationMessage(
+                    `🎉 Successfully extracted ${strings.length} string(s) and updated locale files!`
+                );
+            } else {
+                throw new Error('Failed to apply text edits');
+            }
+        });
     }
 
     /**

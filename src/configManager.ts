@@ -10,13 +10,46 @@ export class ConfigManager {
     public static getConfig(): YerelConfig {
         const config = vscode.workspace.getConfiguration(this.EXTENSION_ID);
         
+        // Handle language presets
+        const supportedLanguages = this.resolveLanguages(config);
+        
         return {
             translationFunction: config.get('translationFunction', '$t'),
             templateSyntax: config.get('templateSyntax', '{{ {func}(\'{key}\') }}'),
             localesPath: config.get('localesPath', 'locales'),
-            supportedLanguages: config.get('supportedLanguages', ['en', 'tr', 'ru']),
-            keyNamingStyle: config.get('keyNamingStyle', 'dot.notation')
+            supportedLanguages: supportedLanguages,
+            keyNamingStyle: config.get('keyNamingStyle', 'snake_case'),
+            openai: {
+                apiKey: config.get('openai.apiKey', ''),
+                model: config.get('openai.model', 'gpt-3.5-turbo'),
+                enabled: config.get('openai.enabled', false)
+            }
         };
+    }
+
+    /**
+     * Resolve supported languages based on preset or custom selection
+     */
+    private static resolveLanguages(config: vscode.WorkspaceConfiguration): string[] {
+        const preset = config.get('languagePresets', 'custom') as string;
+        
+        switch (preset) {
+            case 'europe':
+                return ['en', 'tr', 'ru', 'de', 'fr', 'es', 'it', 'nl', 'pl', 'sv'];
+            
+            case 'asia':
+                return ['en', 'ja', 'ko', 'zh', 'hi', 'th', 'vi', 'id'];
+            
+            case 'global':
+                return ['en', 'tr', 'ru', 'id', 'es', 'fr', 'de', 'ja', 'ko', 'zh', 'ar', 'hi'];
+            
+            case 'minimal':
+                return ['en', 'tr', 'ru', 'id'];
+            
+            case 'custom':
+            default:
+                return config.get('supportedLanguages', ['en', 'tr', 'ru', 'id', 'es', 'fr', 'de', 'ja', 'ko', 'zh']);
+        }
     }
 
     /**

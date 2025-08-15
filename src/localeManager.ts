@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ConfigManager } from './configManager';
+import { OpenAIService } from './openaiService';
 import { TranslationEntry } from './types';
 
 export class LocaleManager {
@@ -19,12 +20,28 @@ export class LocaleManager {
         await this.ensureDirectoryExists(localesPath);
 
         const config = ConfigManager.getConfig();
+        const updatedLanguages: string[] = [];
         
         // Process each language
         for (const lang of config.supportedLanguages) {
             const filePath = path.join(localesPath, `${lang}.json`);
-            await this.updateLocaleFile(filePath, entries, lang);
+            try {
+                await this.updateLocaleFile(filePath, entries, lang);
+                updatedLanguages.push(lang);
+            } catch (error) {
+                throw new Error(`Failed to update ${lang}.json: ${error}`);
+            }
         }
+
+        // Show comprehensive success message
+        const languageNames = this.getLanguageDisplayNames();
+        const languageList = updatedLanguages.map(code => 
+            `${languageNames[code] || code} (${code})`
+        ).join(', ');
+
+        vscode.window.showInformationMessage(
+            `🎉 Updated ${entries.length} translation(s) in ${updatedLanguages.length} languages: ${languageList}`
+        );
     }
 
     /**
@@ -46,16 +63,20 @@ export class LocaleManager {
         // Add new translations
         for (const entry of entries) {
             const translation = entry.translations[language] || entry.translations['en'] || entry.key;
-            this.setNestedValue(existingTranslations, entry.key, translation);
+            // Use flat key assignment instead of nested structure
+            existingTranslations[entry.key] = translation;
         }
 
-        // Write updated translations
+                // Write updated translations
         const sortedTranslations = this.sortObjectKeys(existingTranslations);
         const content = JSON.stringify(sortedTranslations, null, 2);
         
-        fs.writeFileSync(filePath, content, 'utf8');
-        
-        vscode.window.showInformationMessage(`Updated ${language}.json with ${entries.length} translation(s)`);
+        try {
+            fs.writeFileSync(filePath, content, 'utf8');
+            console.log(`Successfully updated ${path.basename(filePath)} with ${entries.length} translation(s)`);
+        } catch (error) {
+            throw new Error(`Failed to write file ${filePath}: ${error}`);
+        }
     }
 
     /**
@@ -105,13 +126,73 @@ export class LocaleManager {
     /**
      * Generate translations for different languages
      */
-    public static generateTranslations(originalText: string, key: string): TranslationEntry {
-        // Use the original text for all languages (no translation for now)
+    public static async generateTranslations(originalText: string, key: string): Promise<TranslationEntry> {
         const config = ConfigManager.getConfig();
         const translations: Record<string, string> = {};
         
-        for (const lang of config.supportedLanguages) {
-            translations[lang] = originalText;
+        // Set English as the base language
+        translations['en'] = originalText;
+        
+        // If OpenAI is enabled, translate to other languages in one API call
+        if (config.openai?.enabled && OpenAIService.isConfigured()) {
+            console.log('🤖 OpenAI enabled, generating batch translations...');
+            
+            // Get target languages (exclude English)
+            const targetLanguages = config.supportedLanguages.filter(lang => lang !== 'en');
+            
+            if (targetLanguages.length > 0) {
+                // Show progress indicator while translating
+                const batchTranslations = await vscode.window.withProgress({
+                    location: vscode.ProgressLocation.Notification,
+                    title: `🤖 Translating "${originalText.substring(0, 30)}${originalText.length > 30 ? '...' : ''}"`,
+                    cancellable: false
+                }, async (progress) => {
+                    progress.report({ 
+                        increment: 0, 
+                        message: `to ${targetLanguages.length} languages using OpenAI...` 
+                    });
+
+                    try {
+                        const result = await OpenAIService.translateToMultipleLanguages(
+                            originalText, 
+                            targetLanguages
+                        );
+                        
+                        progress.report({ 
+                            increment: 100, 
+                            message: '✅ Translations completed!' 
+                        });
+                        
+                        return result;
+                        
+                    } catch (error) {
+                        progress.report({ 
+                            increment: 100, 
+                            message: '❌ Translation failed, using fallback...' 
+                        });
+                        
+                        console.error('Error in batch translation:', error);
+                        // Fallback to original text for all languages
+                        const fallback: Record<string, string> = {};
+                        for (const lang of targetLanguages) {
+                            fallback[lang] = originalText;
+                        }
+                        return fallback;
+                    }
+                });
+                
+                // Merge batch translations
+                Object.assign(translations, batchTranslations);
+                
+                console.log(`✅ Batch translated to ${targetLanguages.length} languages:`, batchTranslations);
+            }
+        } else {
+            // No OpenAI, use original text for all languages
+            for (const lang of config.supportedLanguages) {
+                if (lang !== 'en') {
+                    translations[lang] = originalText;
+                }
+            }
         }
 
         return {
@@ -137,7 +218,8 @@ export class LocaleManager {
                     const content = fs.readFileSync(filePath, 'utf8');
                     const translations = JSON.parse(content);
                     
-                    if (this.hasNestedKey(translations, key)) {
+                    // Check for flat key existence
+                    if (translations.hasOwnProperty(key)) {
                         return true;
                     }
                 } catch (error) {
@@ -147,23 +229,6 @@ export class LocaleManager {
         }
 
         return false;
-    }
-
-    /**
-     * Check if nested key exists in object
-     */
-    private static hasNestedKey(obj: any, key: string): boolean {
-        const keys = key.split('.');
-        let current = obj;
-
-        for (const k of keys) {
-            if (typeof current !== 'object' || current === null || !(k in current)) {
-                return false;
-            }
-            current = current[k];
-        }
-
-        return true;
     }
 
     /**
@@ -179,5 +244,55 @@ export class LocaleManager {
         }
 
         return key;
+    }
+
+    /**
+     * Get display names for languages
+     */
+    private static getLanguageDisplayNames(): Record<string, string> {
+        return {
+            'en': 'English',
+            'tr': 'Turkish', 
+            'ru': 'Russian',
+            'id': 'Indonesian',
+            'es': 'Spanish',
+            'fr': 'French',
+            'de': 'German',
+            'ja': 'Japanese',
+            'ko': 'Korean',
+            'zh': 'Chinese',
+            'it': 'Italian',
+            'pt': 'Portuguese',
+            'ar': 'Arabic',
+            'hi': 'Hindi',
+            'th': 'Thai',
+            'vi': 'Vietnamese',
+            'nl': 'Dutch',
+            'pl': 'Polish',
+            'sv': 'Swedish',
+            'da': 'Danish',
+            'no': 'Norwegian',
+            'fi': 'Finnish',
+            'cs': 'Czech',
+            'hu': 'Hungarian',
+            'ro': 'Romanian',
+            'bg': 'Bulgarian',
+            'hr': 'Croatian',
+            'sk': 'Slovak',
+            'sl': 'Slovenian',
+            'et': 'Estonian',
+            'lv': 'Latvian',
+            'lt': 'Lithuanian',
+            'uk': 'Ukrainian',
+            'be': 'Belarusian',
+            'kk': 'Kazakh',
+            'uz': 'Uzbek',
+            'ky': 'Kyrgyz',
+            'tg': 'Tajik',
+            'mn': 'Mongolian',
+            'ka': 'Georgian',
+            'hy': 'Armenian',
+            'az': 'Azerbaijani'
+        };
     }
 }

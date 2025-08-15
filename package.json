@@ -65,14 +65,63 @@
         },
         "yerel.supportedLanguages": {
           "type": "array",
-          "default": ["en", "tr", "ru"],
-          "description": "List of supported language codes"
+          "items": {
+            "type": "string",
+            "enum": [
+              "en", "tr", "ru", "id", "es", "fr", "de", "ja", "ko", "zh",
+              "it", "pt", "ar", "hi", "th", "vi", "nl", "pl", "sv", "da",
+              "no", "fi", "cs", "hu", "ro", "bg", "hr", "sk", "sl", "et",
+              "lv", "lt", "uk", "be", "kk", "uz", "ky", "tg", "mn", "ka",
+              "hy", "az"
+            ],
+            "enumDescriptions": [
+              "English", "Turkish", "Russian", "Indonesian", "Spanish", "French", 
+              "German", "Japanese", "Korean", "Chinese", "Italian", "Portuguese",
+              "Arabic", "Hindi", "Thai", "Vietnamese", "Dutch", "Polish", 
+              "Swedish", "Danish", "Norwegian", "Finnish", "Czech", "Hungarian",
+              "Romanian", "Bulgarian", "Croatian", "Slovak", "Slovenian", "Estonian",
+              "Latvian", "Lithuanian", "Ukrainian", "Belarusian", "Kazakh", "Uzbek",
+              "Kyrgyz", "Tajik", "Mongolian", "Georgian", "Armenian", "Azerbaijani"
+            ]
+          },
+          "default": ["en", "tr", "ru", "id", "es", "fr", "de", "ja", "ko", "zh"],
+          "description": "Select languages to generate translations for. English (en) is always included as the base language.",
+          "uniqueItems": true
         },
         "yerel.keyNamingStyle": {
           "type": "string",
           "enum": ["camelCase", "snake_case", "dot.notation"],
-          "default": "dot.notation",
+          "default": "snake_case",
           "description": "Key naming convention"
+        },
+        "yerel.languagePresets": {
+          "type": "string",
+          "enum": ["custom", "europe", "asia", "global", "minimal"],
+          "enumDescriptions": [
+            "Custom selection (use supportedLanguages setting)",
+            "European languages (en, tr, ru, de, fr, es, it, nl, pl, sv)",
+            "Asian languages (en, ja, ko, zh, hi, th, vi, id)",
+            "Global coverage (en, tr, ru, id, es, fr, de, ja, ko, zh, ar, hi)",
+            "Minimal set (en, tr, ru, id)"
+          ],
+          "default": "custom",
+          "description": "Quick preset for common language combinations. When changed, it will update supportedLanguages automatically."
+        },
+        "yerel.openai.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable OpenAI integration for automatic translations"
+        },
+        "yerel.openai.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI API Key for automatic translations (keep this secure!)"
+        },
+        "yerel.openai.model": {
+          "type": "string",
+          "enum": ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini"],
+          "default": "gpt-3.5-turbo",
+          "description": "OpenAI model to use for translations"
         }
       }
     }
