@@ -20,6 +20,11 @@ export interface YerelConfig {
     localesPath: string;
     supportedLanguages: string[];
     keyNamingStyle: 'camelCase' | 'snake_case' | 'dot.notation';
+    openai?: {
+        apiKey?: string;
+        model?: string;
+        enabled?: boolean;
+    };
 }
 
 export interface TranslationEntry {

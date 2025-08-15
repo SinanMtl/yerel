@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { StringDetector } from './stringDetector';
 import { ConfigManager } from './configManager';
 import { StringReplacer } from './stringReplacer';
+import { OpenAIService } from './openaiService';
 import { ExtractableString } from './types';
 
 // This method is called when your extension is activated
@@ -45,7 +46,15 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	context.subscriptions.push(extractStringsCommand, extractFromSelectionCommand, configureSettingsCommand);
+	const testOpenAICommand = vscode.commands.registerCommand('yerel.testOpenAI', async () => {
+		try {
+			await testOpenAIConnection();
+		} catch (error) {
+			vscode.window.showErrorMessage(`Yerel: ${error}`);
+		}
+	});
+
+	context.subscriptions.push(extractStringsCommand, extractFromSelectionCommand, configureSettingsCommand, testOpenAICommand);
 }
 
 async function extractFromFile(uri: vscode.Uri, detector: StringDetector) {
@@ -144,6 +153,35 @@ async function showStringPreview(strings: ExtractableString[], document: vscode.
 
 async function openSettings() {
 	await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:yerel');
+}
+
+async function testOpenAIConnection() {
+	if (!OpenAIService.isConfigured()) {
+		vscode.window.showWarningMessage('OpenAI is not configured. Please set your API key in settings.');
+		await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:yerel openai');
+		return;
+	}
+
+	// Show progress while testing
+	const result = await vscode.window.withProgress({
+		location: vscode.ProgressLocation.Notification,
+		title: '🤖 Testing OpenAI Connection',
+		cancellable: false
+	}, async (progress) => {
+		progress.report({ increment: 0, message: 'Connecting to OpenAI API...' });
+		
+		const testResult = await OpenAIService.testConnection();
+		
+		progress.report({ increment: 100, message: testResult.success ? '✅ Success!' : '❌ Failed!' });
+		
+		return testResult;
+	});
+	
+	if (result.success) {
+		vscode.window.showInformationMessage('✅ OpenAI connection successful! Ready to translate.');
+	} else {
+		vscode.window.showErrorMessage(`❌ OpenAI connection failed: ${result.error}`);
+	}
 }
 
 // This method is called when your extension is deactivated
