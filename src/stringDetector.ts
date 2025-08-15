@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ExtractableString, ExtractResult } from './types';
+import { ConfigManager } from './configManager';
 
 export class StringDetector {
     
@@ -49,7 +50,7 @@ export class StringDetector {
         let match;
         while ((match = htmlTextRegex.exec(content)) !== null) {
             const text = match[1].trim();
-            if (text && !this.isIgnorableText(text)) {
+            if (text && !this.isIgnorableText(text) && !this.isAlreadyTranslated(text, match.index + 1, content)) {
                 const position = document.positionAt(match.index + 1);
                 const endPosition = document.positionAt(match.index + match[0].length - 1);
                 
@@ -72,7 +73,7 @@ export class StringDetector {
         
         while ((match = attrRegex.exec(content)) !== null) {
             const text = match[1].trim();
-            if (text && !this.isIgnorableText(text)) {
+            if (text && !this.isIgnorableText(text) && !this.isAlreadyTranslated(text, match.index + match[0].indexOf(text), content)) {
                 const position = document.positionAt(match.index + match[0].indexOf(text));
                 const endPosition = document.positionAt(match.index + match[0].indexOf(text) + text.length);
                 
@@ -222,6 +223,13 @@ export class StringDetector {
                 continue;
             }
             
+            // Skip if this appears to be already translated
+            const lineStartOffset = document.offsetAt(new vscode.Position(lineIndex, 0));
+            const absolutePosition = lineStartOffset + match.index;
+            if (this.isAlreadyTranslated(text, absolutePosition, document.getText())) {
+                continue;
+            }
+            
             // Only include strings that look like natural language
             if (this.isNaturalLanguage(text)) {
                 const lineStartOffset = document.offsetAt(new vscode.Position(lineIndex, 0));
@@ -314,6 +322,87 @@ export class StringDetector {
             .filter(word => word.length > 0)
             .slice(0, 3) // Take first 3 words
             .join('.');
+    }
+
+    /**
+     * Check if text appears to be an already translated key
+     * This checks for common translation function patterns like $t('key'), t('key'), etc.
+     */
+    private isAlreadyTranslated(text: string, position: number, content: string): boolean {
+        const config = ConfigManager.getConfig();
+        const translationFunction = config.translationFunction;
+        
+        // Get surrounding context (100 chars before and after)
+        const start = Math.max(0, position - 100);
+        const end = Math.min(content.length, position + text.length + 100);
+        const context = content.substring(start, end);
+        
+        // Check for various translation function patterns
+        const patterns = [
+            // $t('key'), t('key'), i18n.t('key'), etc.
+            new RegExp(`${this.escapeRegex(translationFunction)}\\s*\\(['"]\`?[^'"\`]*['"\`]?\\)`, 'g'),
+            // {{ $t('key') }}, {{ t('key') }} - template syntax
+            new RegExp(`\\{\\{[^}]*${this.escapeRegex(translationFunction)}\\s*\\(['"]\`?[^'"\`]*['"\`]?\\)[^}]*\\}\\}`, 'g'),
+            // v-text="$t('key')" - Vue directive
+            new RegExp(`v-text\\s*=\\s*["']${this.escapeRegex(translationFunction)}\\(['"]\`?[^'"\`]*['"\`]?\\)["']`, 'g'),
+            // :placeholder="$t('key')" - Vue binding
+            new RegExp(`:[a-zA-Z-]+\\s*=\\s*["']${this.escapeRegex(translationFunction)}\\(['"]\`?[^'"\`]*['"\`]?\\)["']`, 'g'),
+            // {t('key')} - React i18next
+            new RegExp(`\\{[^}]*${this.escapeRegex(translationFunction)}\\s*\\(['"]\`?[^'"\`]*['"\`]?\\)[^}]*\\}`, 'g'),
+            // Template literals containing translation functions like `{{ $t('key') }}`
+            new RegExp('`[^`]*\\{\\{[^}]*' + this.escapeRegex(translationFunction) + '\\s*\\([\'"`]?[^\'"`]*[\'"`]?\\)[^}]*\\}\\}[^`]*`', 'g')
+        ];
+        
+        // Check if the string appears within any translation function call
+        for (const pattern of patterns) {
+            const matches = context.matchAll(pattern);
+            for (const match of matches) {
+                const matchStart = start + match.index!;
+                const matchEnd = matchStart + match[0].length;
+                
+                // Check if our string position is within this translated section
+                if (position >= matchStart && position + text.length <= matchEnd) {
+                    return true;
+                }
+            }
+        }
+        
+        // Additional check: if the string is surrounded by translation syntax
+        const beforeText = content.substring(Math.max(0, position - 50), position);
+        const afterText = content.substring(position + text.length, Math.min(content.length, position + text.length + 50));
+        
+        // Check for common translation patterns immediately surrounding the text
+        if (beforeText.match(new RegExp(`${this.escapeRegex(translationFunction)}\\s*\\(['"]\`?$`)) ||
+            afterText.match(/^['"`]?\s*\)/)) {
+            return true;
+        }
+        
+        // Check if inside a template literal with translation functions
+        // Look for the full template literal pattern containing our position
+        const beforeTemplate = content.substring(Math.max(0, position - 200), position);
+        const afterTemplate = content.substring(position + text.length, Math.min(content.length, position + text.length + 200));
+        
+        // Check if we're inside a template literal that contains translation functions
+        const templateStart = beforeTemplate.lastIndexOf('`');
+        const templateEnd = afterTemplate.indexOf('`');
+        
+        if (templateStart !== -1 && templateEnd !== -1) {
+            const fullTemplate = beforeTemplate.substring(templateStart) + text + afterTemplate.substring(0, templateEnd + 1);
+            // Check if this template contains translation function calls
+            const templatePattern = new RegExp(`\\{\\{[^}]*${this.escapeRegex(translationFunction)}\\s*\\(['"]\`?[^'"\`]*['"\`]?\\)[^}]*\\}\\}`, 'g');
+            if (templatePattern.test(fullTemplate)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Escape special regex characters
+     */
+    private escapeRegex(str: string): string {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
     /**
