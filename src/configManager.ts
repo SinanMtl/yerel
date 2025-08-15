@@ -123,22 +123,16 @@ export class ConfigManager {
     }
 
     /**
-     * Get full locales path based on current file's directory
+     * Get full locales path based on user config or workspace root
      */
     public static getLocalesFullPath(currentFileUri?: vscode.Uri): string | undefined {
-        let basePath: string | undefined;
-
-        if (currentFileUri) {
-            // Use the directory of the current file
-            basePath = vscode.Uri.joinPath(currentFileUri, '..').fsPath;
-        } else {
-            // Fallback to workspace root
-            const workspaceRoot = this.getWorkspaceRoot();
-            if (!workspaceRoot) { return undefined; }
-            basePath = workspaceRoot;
-        }
-        
         const config = this.getConfig();
-        return vscode.Uri.joinPath(vscode.Uri.file(basePath), config.localesPath).fsPath;
+        // Eğer ayarda localesPath varsa onu kullan, yoksa 'locales' olarak varsay
+        const localesPath = config.localesPath || 'locales';
+
+        // Her zaman workspace root'u baz al
+        const workspaceRoot = this.getWorkspaceRoot();
+        if (!workspaceRoot) { return undefined; }
+        return vscode.Uri.joinPath(vscode.Uri.file(workspaceRoot), localesPath).fsPath;
     }
 }
