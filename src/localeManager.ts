@@ -63,8 +63,8 @@ export class LocaleManager {
         // Add new translations
         for (const entry of entries) {
             const translation = entry.translations[language] || entry.translations['en'] || entry.key;
-            // Use flat key assignment instead of nested structure
-            existingTranslations[entry.key] = translation;
+            // Use nested structure for dot notation keys
+            this.setNestedValue(existingTranslations, entry.key, translation);
         }
 
                 // Write updated translations
