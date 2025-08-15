@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Page</title>
+</head>
+<body>
+    <h1>Welcome to our website</h1>
+    <p>This is a sample paragraph with text that should be extracted.</p>
+    <button>Submit Form</button>
+    <input type="text" placeholder="Enter your name here" />
+    <div>
+        <span>Hello world, how are you today?</span>
+        <p>Thank you for visiting us</p>
+    </div>
+    
+    <script>
+        const message = "This is a JavaScript string";
+        const greeting = 'Hello from JavaScript!';
+        console.log("This should also be detected");
+        alert("Welcome message");
+        
+        // This should be ignored
+        import './styles.css';
+        const API_URL = "http://localhost:3000";
+    </script>
+</body>
+</html>

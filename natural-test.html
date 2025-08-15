@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Natural Language's Test</title>
+</head>
+<body>
+    <h1>Welcome to "our" amazing platform</h1>
+    <p>This is a meaningful paragraph with natural language content.</p>
+    <button>Click here to submit your application</button>
+    <input type="text" placeholder="Please enter your full name and surname" />
+    
+    <script>
+        // These should be detected (natural language)
+        const userMessage = "Hello there, welcome to our platform!";
+        const successAlert = "Your application has been submitted successfully.";
+        const confirmText = "Are you sure you want to delete this item?";
+        console.log("Processing your request, please wait...");
+        alert("Thank you for choosing our service!");
+        
+        // These should be ignored (code-like)
+        const apiUrl = "http://localhost:3000";
+        const userId = "user123";
+        const fileType = "json";
+        const configPath = "./config.js";
+        const API_KEY = "abc123";
+        import './styles.css';
+        const className = "btn-primary";
+        const isActive = "true";
+    </script>
+</body>
+</html>

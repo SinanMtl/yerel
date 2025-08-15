@@ -14,10 +14,68 @@
   "contributes": {
     "commands": [
       {
-        "command": "yerel.helloWorld",
-        "title": "Hello World"
+        "command": "yerel.extractStrings",
+        "title": "Extract Strings to i18n",
+        "category": "Yerel"
+      },
+      {
+        "command": "yerel.extractFromSelection",
+        "title": "Extract Selected Text to i18n",
+        "category": "Yerel"
+      },
+      {
+        "command": "yerel.configureSettings",
+        "title": "Configure i18n Settings",
+        "category": "Yerel"
       }
-    ]
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "yerel.extractFromSelection",
+          "when": "editorHasSelection",
+          "group": "yerel"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "yerel.extractStrings",
+          "when": "resourceExtname =~ /\\.(html|js|ts|vue|jsx|tsx)$/",
+          "group": "yerel"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Yerel i18n",
+      "properties": {
+        "yerel.translationFunction": {
+          "type": "string",
+          "default": "$t",
+          "description": "Translation function name (e.g., $t, t, i18n.t)"
+        },
+        "yerel.templateSyntax": {
+          "type": "string",
+          "default": "{{ {func}('{key}') }}",
+          "description": "Template syntax for translations. Use {func} for function and {key} for translation key"
+        },
+        "yerel.localesPath": {
+          "type": "string",
+          "default": "locales",
+          "description": "Path to locales directory"
+        },
+        "yerel.supportedLanguages": {
+          "type": "array",
+          "default": ["en", "tr", "ru"],
+          "description": "List of supported language codes"
+        },
+        "yerel.keyNamingStyle": {
+          "type": "string",
+          "enum": ["camelCase", "snake_case", "dot.notation"],
+          "default": "dot.notation",
+          "description": "Key naming convention"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "yarn run package",

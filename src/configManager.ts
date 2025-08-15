@@ -1,0 +1,111 @@
+import * as vscode from 'vscode';
+import { YerelConfig } from './types';
+
+export class ConfigManager {
+    private static readonly EXTENSION_ID = 'yerel';
+
+    /**
+     * Get current extension configuration
+     */
+    public static getConfig(): YerelConfig {
+        const config = vscode.workspace.getConfiguration(this.EXTENSION_ID);
+        
+        return {
+            translationFunction: config.get('translationFunction', '$t'),
+            templateSyntax: config.get('templateSyntax', '{{ {func}(\'{key}\') }}'),
+            localesPath: config.get('localesPath', 'locales'),
+            supportedLanguages: config.get('supportedLanguages', ['en', 'tr', 'ru']),
+            keyNamingStyle: config.get('keyNamingStyle', 'dot.notation')
+        };
+    }
+
+    /**
+     * Generate translation template based on config
+     */
+    public static generateTemplate(key: string, config?: YerelConfig): string {
+        const cfg = config || this.getConfig();
+        return cfg.templateSyntax
+            .replace('{func}', cfg.translationFunction)
+            .replace('{key}', key);
+    }
+
+    /**
+     * Convert key to specified naming convention
+     */
+    public static formatKey(text: string, style?: string): string {
+        const namingStyle = style || this.getConfig().keyNamingStyle;
+        
+        // Clean and normalize text
+        let cleanText = text
+            .toLowerCase()
+            .replace(/[^a-zA-Z0-9\s]/g, ' ')
+            .trim()
+            .split(/\s+/)
+            .filter(word => word.length > 2) // Only words longer than 2 chars
+            .filter(word => !this.isStopWord(word)); // Remove common stop words
+
+        // If no meaningful words left, use first few characters
+        if (cleanText.length === 0) {
+            cleanText = [text.toLowerCase().replace(/[^a-zA-Z0-9]/g, '').substring(0, 8)];
+        }
+
+        // Limit to maximum 2 words for shorter keys
+        cleanText = cleanText.slice(0, 2);
+
+        // If we have only one word and it's too long, shorten it
+        if (cleanText.length === 1 && cleanText[0].length > 8) {
+            cleanText[0] = cleanText[0].substring(0, 8);
+        }
+
+        switch (namingStyle) {
+            case 'camelCase':
+                if (cleanText.length === 0) { return ''; }
+                return cleanText[0] + cleanText.slice(1).map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                ).join('');
+            
+            case 'snake_case':
+                return cleanText.join('_');
+            
+            case 'dot.notation':
+            default:
+                return cleanText.join('.');
+        }
+    }
+
+    /**
+     * Check if word is a common stop word that should be ignored in keys
+     */
+    private static isStopWord(word: string): boolean {
+        const stopWords = ['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those', 'a', 'an'];
+        return stopWords.includes(word.toLowerCase());
+    }
+
+    /**
+     * Get workspace root path
+     */
+    public static getWorkspaceRoot(): string | undefined {
+        const workspaces = vscode.workspace.workspaceFolders;
+        return workspaces && workspaces.length > 0 ? workspaces[0].uri.fsPath : undefined;
+    }
+
+    /**
+     * Get full locales path based on current file's directory
+     */
+    public static getLocalesFullPath(currentFileUri?: vscode.Uri): string | undefined {
+        let basePath: string | undefined;
+
+        if (currentFileUri) {
+            // Use the directory of the current file
+            basePath = vscode.Uri.joinPath(currentFileUri, '..').fsPath;
+        } else {
+            // Fallback to workspace root
+            const workspaceRoot = this.getWorkspaceRoot();
+            if (!workspaceRoot) { return undefined; }
+            basePath = workspaceRoot;
+        }
+        
+        const config = this.getConfig();
+        return vscode.Uri.joinPath(vscode.Uri.file(basePath), config.localesPath).fsPath;
+    }
+}
