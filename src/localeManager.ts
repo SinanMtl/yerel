@@ -34,18 +34,10 @@ export class LocaleManager {
             }
         }
 
-        // Show comprehensive success message
-        const languageNames = this.getLanguageDisplayNames();
-        const languageList = updatedLanguages.map(code => 
-            `${languageNames[code] || code} (${code})`
-        ).join(', ');
-
-        vscode.window.showInformationMessage(
-            `🎉 Updated ${entries.length} translation(s) in ${updatedLanguages.length} languages: ${languageList}`
-        );
-
-        // Google Sheets export if enabled
-        await this.exportToGoogleSheetsIfEnabled(entries);
+        // Google Sheets export if enabled (non-blocking)
+        this.exportToGoogleSheetsIfEnabled(entries).catch(error => {
+            console.error('Google Sheets export error:', error);
+        });
     }
 
     /**

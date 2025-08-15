@@ -123,18 +123,22 @@ export class StringReplacer {
                 // Save translations to locale files
                 await LocaleManager.saveTranslations(translationEntries, document.uri);
                 
+                // Complete the progress to 100%
                 progress.report({ 
                     increment: 10, 
-                    message: '✅ Extraction completed!' 
+                    message: 'Completed successfully!' 
                 });
-                
-                vscode.window.showInformationMessage(
-                    `🎉 Successfully extracted ${strings.length} string(s) and updated locale files!`
-                );
             } else {
                 throw new Error('Failed to apply text edits');
             }
         });
+
+        // Show success message outside progress (after a small delay)
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        vscode.window.showInformationMessage(
+            `🎉 Successfully extracted ${strings.length} string(s) and updated locale files!`
+        );
     }
 
     /**

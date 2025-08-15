@@ -58,6 +58,9 @@ export class GoogleSheetsService {
         }
 
         try {
+            let allTranslations: Record<string, Record<string, string>> = {};
+            let allKeys = new Set<string>();
+            
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: '📊 Exporting All Translations to Google Sheets',
@@ -69,7 +72,7 @@ export class GoogleSheetsService {
                 });
 
                 // Read all locale files
-                const allTranslations: Record<string, Record<string, string>> = {};
+                allTranslations = {};
                 const fs = await import('fs');
                 const path = await import('path');
                 
@@ -98,7 +101,7 @@ export class GoogleSheetsService {
                 });
 
                 // Collect all unique keys
-                const allKeys = new Set<string>();
+                allKeys = new Set<string>();
                 Object.values(allTranslations).forEach(langTranslations => {
                     Object.keys(langTranslations).forEach(key => allKeys.add(key));
                 });
@@ -137,25 +140,28 @@ export class GoogleSheetsService {
 
                 progress.report({ 
                     increment: 20, 
-                    message: '✅ Export completed!' 
+                    message: 'Finalizing export...' 
                 });
-
-                // Show comprehensive success message
-                const languageCount = Object.keys(allTranslations).length;
-                const keyCount = allKeys.size;
-                
-                const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${config.googleSheets!.spreadsheetId!}/edit`;
-                const openAction = 'Open Spreadsheet';
-                
-                const choice = await vscode.window.showInformationMessage(
-                    `🎉 Successfully exported ${keyCount} translation keys in ${languageCount} languages to Google Sheets!`,
-                    openAction
-                );
-                
-                if (choice === openAction) {
-                    vscode.env.openExternal(vscode.Uri.parse(spreadsheetUrl));
-                }
             });
+
+            // Show comprehensive success message outside progress context
+            const languageCount = Object.keys(allTranslations).length;
+            const keyCount = allKeys.size;
+            
+            const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${config.googleSheets!.spreadsheetId!}/edit`;
+            const openAction = 'Open Spreadsheet';
+            
+            // Small delay to ensure progress completes
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            const choice = await vscode.window.showInformationMessage(
+                `🎉 Successfully exported ${keyCount} translation keys in ${languageCount} languages to Google Sheets!`,
+                openAction
+            );
+            
+            if (choice === openAction) {
+                vscode.env.openExternal(vscode.Uri.parse(spreadsheetUrl));
+            }
 
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -280,22 +286,25 @@ export class GoogleSheetsService {
 
                 progress.report({ 
                     increment: 20, 
-                    message: '✅ Export completed!' 
+                    message: 'Finalizing export...' 
                 });
-
-                // Show success message with link
-                const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${config.googleSheets!.spreadsheetId!}/edit`;
-                const openAction = 'Open Spreadsheet';
-                
-                const choice = await vscode.window.showInformationMessage(
-                    `🎉 Successfully exported ${entries.length} translation(s) to Google Sheets!`,
-                    openAction
-                );
-                
-                if (choice === openAction) {
-                    vscode.env.openExternal(vscode.Uri.parse(spreadsheetUrl));
-                }
             });
+
+            // Show success message with link outside progress context
+            const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${config.googleSheets!.spreadsheetId!}/edit`;
+            const openAction = 'Open Spreadsheet';
+            
+            // Small delay to ensure progress completes
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            const choice = await vscode.window.showInformationMessage(
+                `🎉 Successfully exported ${entries.length} translation(s) to Google Sheets!`,
+                openAction
+            );
+            
+            if (choice === openAction) {
+                vscode.env.openExternal(vscode.Uri.parse(spreadsheetUrl));
+            }
 
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
