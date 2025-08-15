@@ -23,6 +23,11 @@ export class ConfigManager {
                 apiKey: config.get('openai.apiKey', ''),
                 model: config.get('openai.model', 'gpt-3.5-turbo'),
                 enabled: config.get('openai.enabled', false)
+            },
+            googleSheets: {
+                enabled: config.get('googleSheets.enabled', false),
+                serviceAccountJson: config.get('googleSheets.serviceAccountJson', ''),
+                spreadsheetId: config.get('googleSheets.spreadsheetId', '')
             }
         };
     }

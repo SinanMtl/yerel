@@ -5,6 +5,7 @@ import { StringDetector } from './stringDetector';
 import { ConfigManager } from './configManager';
 import { StringReplacer } from './stringReplacer';
 import { OpenAIService } from './openaiService';
+import { GoogleSheetsService } from './googleSheetsService';
 import { ExtractableString } from './types';
 
 // This method is called when your extension is activated
@@ -54,7 +55,30 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	context.subscriptions.push(extractStringsCommand, extractFromSelectionCommand, configureSettingsCommand, testOpenAICommand);
+	const testGoogleSheetsCommand = vscode.commands.registerCommand('yerel.testGoogleSheets', async () => {
+		try {
+			await testGoogleSheetsConnection();
+		} catch (error) {
+			vscode.window.showErrorMessage(`Yerel: ${error}`);
+		}
+	});
+
+	const exportAllToSheetsCommand = vscode.commands.registerCommand('yerel.exportAllToSheets', async () => {
+		try {
+			await exportAllTranslationsToSheets();
+		} catch (error) {
+			vscode.window.showErrorMessage(`Yerel: ${error}`);
+		}
+	});
+
+		context.subscriptions.push(
+		extractStringsCommand,
+		extractFromSelectionCommand,
+		configureSettingsCommand,
+		testOpenAICommand,
+		testGoogleSheetsCommand,
+		exportAllToSheetsCommand
+	);
 }
 
 async function extractFromFile(uri: vscode.Uri, detector: StringDetector) {
@@ -181,6 +205,59 @@ async function testOpenAIConnection() {
 		vscode.window.showInformationMessage('✅ OpenAI connection successful! Ready to translate.');
 	} else {
 		vscode.window.showErrorMessage(`❌ OpenAI connection failed: ${result.error}`);
+	}
+}
+
+async function testGoogleSheetsConnection() {
+	if (!GoogleSheetsService.isConfigured()) {
+		GoogleSheetsService.showSetupInstructions();
+		return;
+	}
+
+	// Show progress while testing
+	const result = await vscode.window.withProgress({
+		location: vscode.ProgressLocation.Notification,
+		title: '📊 Testing Google Sheets Connection',
+		cancellable: false
+	}, async (progress) => {
+		progress.report({ increment: 0, message: 'Validating configuration...' });
+		
+		const testResult = await GoogleSheetsService.testConnection();
+		
+		progress.report({ increment: 100, message: testResult.success ? '✅ Success!' : '❌ Failed!' });
+		
+		return testResult;
+	});
+	
+	if (result.success) {
+		vscode.window.showInformationMessage(result.message);
+	} else {
+		vscode.window.showErrorMessage(result.message);
+	}
+}
+
+async function exportAllTranslationsToSheets() {
+	if (!GoogleSheetsService.isConfigured()) {
+		GoogleSheetsService.showSetupInstructions();
+		return;
+	}
+
+	// Confirm action
+	const choice = await vscode.window.showWarningMessage(
+		'🔄 This will export ALL existing translations from your locale files to Google Sheets. This may overwrite existing data in the spreadsheet. Continue?',
+		'Export All',
+		'Cancel'
+	);
+
+	if (choice !== 'Export All') {
+		return;
+	}
+
+	try {
+		await GoogleSheetsService.exportAllLocaleFiles();
+	} catch (error) {
+		// Error already handled in the service
+		console.error('Export all translations failed:', error);
 	}
 }
 

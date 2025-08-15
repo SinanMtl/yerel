@@ -27,6 +27,16 @@
         "command": "yerel.configureSettings",
         "title": "Configure i18n Settings",
         "category": "Yerel"
+      },
+      {
+        "command": "yerel.testGoogleSheets",
+        "title": "Test Google Sheets Connection",
+        "category": "Yerel"
+      },
+      {
+        "command": "yerel.exportAllToSheets",
+        "title": "Export All Translations to Google Sheets",
+        "category": "Yerel"
       }
     ],
     "menus": {
@@ -68,35 +78,128 @@
           "items": {
             "type": "string",
             "enum": [
-              "en", "tr", "ru", "id", "es", "fr", "de", "ja", "ko", "zh",
-              "it", "pt", "ar", "hi", "th", "vi", "nl", "pl", "sv", "da",
-              "no", "fi", "cs", "hu", "ro", "bg", "hr", "sk", "sl", "et",
-              "lv", "lt", "uk", "be", "kk", "uz", "ky", "tg", "mn", "ka",
-              "hy", "az"
+              "en",
+              "tr",
+              "ru",
+              "id",
+              "es",
+              "fr",
+              "de",
+              "ja",
+              "ko",
+              "zh",
+              "it",
+              "pt",
+              "ar",
+              "hi",
+              "th",
+              "vi",
+              "nl",
+              "pl",
+              "sv",
+              "da",
+              "no",
+              "fi",
+              "cs",
+              "hu",
+              "ro",
+              "bg",
+              "hr",
+              "sk",
+              "sl",
+              "et",
+              "lv",
+              "lt",
+              "uk",
+              "be",
+              "kk",
+              "uz",
+              "ky",
+              "tg",
+              "mn",
+              "ka",
+              "hy",
+              "az"
             ],
             "enumDescriptions": [
-              "English", "Turkish", "Russian", "Indonesian", "Spanish", "French", 
-              "German", "Japanese", "Korean", "Chinese", "Italian", "Portuguese",
-              "Arabic", "Hindi", "Thai", "Vietnamese", "Dutch", "Polish", 
-              "Swedish", "Danish", "Norwegian", "Finnish", "Czech", "Hungarian",
-              "Romanian", "Bulgarian", "Croatian", "Slovak", "Slovenian", "Estonian",
-              "Latvian", "Lithuanian", "Ukrainian", "Belarusian", "Kazakh", "Uzbek",
-              "Kyrgyz", "Tajik", "Mongolian", "Georgian", "Armenian", "Azerbaijani"
+              "English",
+              "Turkish",
+              "Russian",
+              "Indonesian",
+              "Spanish",
+              "French",
+              "German",
+              "Japanese",
+              "Korean",
+              "Chinese",
+              "Italian",
+              "Portuguese",
+              "Arabic",
+              "Hindi",
+              "Thai",
+              "Vietnamese",
+              "Dutch",
+              "Polish",
+              "Swedish",
+              "Danish",
+              "Norwegian",
+              "Finnish",
+              "Czech",
+              "Hungarian",
+              "Romanian",
+              "Bulgarian",
+              "Croatian",
+              "Slovak",
+              "Slovenian",
+              "Estonian",
+              "Latvian",
+              "Lithuanian",
+              "Ukrainian",
+              "Belarusian",
+              "Kazakh",
+              "Uzbek",
+              "Kyrgyz",
+              "Tajik",
+              "Mongolian",
+              "Georgian",
+              "Armenian",
+              "Azerbaijani"
             ]
           },
-          "default": ["en", "tr", "ru", "id", "es", "fr", "de", "ja", "ko", "zh"],
+          "default": [
+            "en",
+            "tr",
+            "ru",
+            "id",
+            "es",
+            "fr",
+            "de",
+            "ja",
+            "ko",
+            "zh"
+          ],
           "description": "Select languages to generate translations for. English (en) is always included as the base language.",
           "uniqueItems": true
         },
         "yerel.keyNamingStyle": {
           "type": "string",
-          "enum": ["camelCase", "snake_case", "dot.notation"],
+          "enum": [
+            "camelCase",
+            "snake_case",
+            "dot.notation"
+          ],
           "default": "snake_case",
           "description": "Key naming convention"
         },
         "yerel.languagePresets": {
           "type": "string",
-          "enum": ["custom", "europe", "asia", "global", "minimal"],
+          "enum": [
+            "custom",
+            "europe",
+            "asia",
+            "global",
+            "minimal"
+          ],
           "enumDescriptions": [
             "Custom selection (use supportedLanguages setting)",
             "European languages (en, tr, ru, de, fr, es, it, nl, pl, sv)",
@@ -119,9 +222,30 @@
         },
         "yerel.openai.model": {
           "type": "string",
-          "enum": ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini"],
+          "enum": [
+            "gpt-3.5-turbo",
+            "gpt-4",
+            "gpt-4-turbo",
+            "gpt-4o",
+            "gpt-4o-mini"
+          ],
           "default": "gpt-3.5-turbo",
           "description": "OpenAI model to use for translations"
+        },
+        "yerel.googleSheets.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Google Sheets integration to export translations"
+        },
+        "yerel.googleSheets.serviceAccountJson": {
+          "type": "string",
+          "default": "",
+          "description": "Google Service Account JSON (entire JSON content from Google Cloud Console)"
+        },
+        "yerel.googleSheets.spreadsheetId": {
+          "type": "string",
+          "default": "",
+          "description": "Google Spreadsheet ID (found in the spreadsheet URL)"
         }
       }
     }
@@ -141,16 +265,19 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.103.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
+    "@types/vscode": "^1.103.0",
     "@typescript-eslint/eslint-plugin": "^8.39.0",
     "@typescript-eslint/parser": "^8.39.0",
-    "eslint": "^9.32.0",
-    "esbuild": "^0.25.8",
-    "npm-run-all": "^4.1.5",
-    "typescript": "^5.9.2",
     "@vscode/test-cli": "^0.0.11",
-    "@vscode/test-electron": "^2.5.2"
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.25.8",
+    "eslint": "^9.32.0",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "googleapis": "^156.0.0"
   }
 }

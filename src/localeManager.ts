@@ -4,6 +4,7 @@ import * as path from 'path';
 import { ConfigManager } from './configManager';
 import { OpenAIService } from './openaiService';
 import { TranslationEntry } from './types';
+import { GoogleSheetsService } from './googleSheetsService';
 
 export class LocaleManager {
     
@@ -42,6 +43,41 @@ export class LocaleManager {
         vscode.window.showInformationMessage(
             `🎉 Updated ${entries.length} translation(s) in ${updatedLanguages.length} languages: ${languageList}`
         );
+
+        // Google Sheets export if enabled
+        await this.exportToGoogleSheetsIfEnabled(entries);
+    }
+
+    /**
+     * Export to Google Sheets if enabled and configured
+     */
+    private static async exportToGoogleSheetsIfEnabled(entries: TranslationEntry[]): Promise<void> {
+        const config = ConfigManager.getConfig();
+        
+        if (!config.googleSheets?.enabled) {
+            return; // Google Sheets not enabled
+        }
+
+        try {
+            if (!GoogleSheetsService.isConfigured()) {
+                vscode.window.showWarningMessage(
+                    '⚠️ Google Sheets is enabled but not properly configured. Please check your settings.',
+                    'Open Settings'
+                ).then(choice => {
+                    if (choice === 'Open Settings') {
+                        vscode.commands.executeCommand('workbench.action.openSettings', 'yerel.googleSheets');
+                    }
+                });
+                return;
+            }
+
+            await GoogleSheetsService.exportToSheets(entries);
+        } catch (error) {
+            console.error('Google Sheets export error:', error);
+            vscode.window.showErrorMessage(
+                `❌ Failed to export to Google Sheets: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+        }
     }
 
     /**

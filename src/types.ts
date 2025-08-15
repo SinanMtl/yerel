@@ -25,6 +25,11 @@ export interface YerelConfig {
         model?: string;
         enabled?: boolean;
     };
+    googleSheets?: {
+        enabled?: boolean;
+        serviceAccountJson?: string;
+        spreadsheetId?: string;
+    };
 }
 
 export interface TranslationEntry {
