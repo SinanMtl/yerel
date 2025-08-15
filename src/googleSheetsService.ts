@@ -242,7 +242,7 @@ export class GoogleSheetsService {
                 });
 
                 const authClient = await auth.getClient();
-                const sheets = google.sheets({ version: 'v4', auth: authClient });
+                const sheets = google.sheets({ version: 'v4', auth: auth });
 
                 progress.report({ 
                     increment: 30, 
@@ -279,10 +279,10 @@ export class GoogleSheetsService {
                     spreadsheetId: config.googleSheets!.spreadsheetId!,
                     range: 'A1',
                     valueInputOption: 'USER_ENTERED',
-                    resource: {
+                    requestBody: {
                         values: sheetData,
                     },
-                });
+                } as any);
 
                 progress.report({ 
                     increment: 20, 

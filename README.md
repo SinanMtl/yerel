@@ -1,71 +1,47 @@
-# yerel README
+# 🌍 Yerel - i18n String Extraction Tool
 
-This is the README for your extension "yerel". After writing up a brief description, we recommend including the following sections.
+A powerful VS Code extension for extracting hardcoded strings and converting them to internationalization (i18n) format with automatic translation support.
 
-## Features
+## ✨ Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- **🔍 Smart String Detection**: Automatically detects extractable strings in your code
+- **🎯 Context-Aware Replacement**: Supports JavaScript, TypeScript, HTML, Vue, React, and more
+- **🤖 AI-Powered Translation**: Integrates with OpenAI to generate translations for 42+ languages
+- **📊 Google Sheets Integration**: Export translations to Google Sheets for team collaboration
+- **🔑 Smart Key Generation**: Generates meaningful, collision-free translation keys
+- **⚡ Batch Processing**: Extract multiple strings at once
+- **🎨 Live Preview**: See replacement preview before applying changes
 
-For example if there is an image subfolder under your extension project workspace:
+## 🚀 Quick Start
 
-\!\[feature X\]\(images/feature-x.png\)
+1. Select hardcoded strings in your code
+2. Right-click and choose "Extract Strings to i18n"
+3. Review the preview and confirm
+4. ✅ Strings are automatically replaced and translation files updated!
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+## ⚙️ Configuration
 
-## Requirements
+Configure the extension in VS Code Settings:
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+- **Translation Function**: Set your i18n function name (e.g., `t`, `$t`, `i18n.t`)
+- **Supported Languages**: Choose which languages to support
+- **OpenAI Integration**: Add your OpenAI API key for automatic translations
+- **Google Sheets**: Connect to Google Sheets for team collaboration
+- **Locales Path**: Set where translation files should be stored
 
-## Extension Settings
+## 📋 Requirements
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+- VS Code 1.74.0 or higher
+- Optional: OpenAI API key for automatic translations
+- Optional: Google Cloud Service Account for Sheets integration
 
-For example:
+## 🎯 Supported Frameworks
 
-This extension contributes the following settings:
+- ✅ Vue.js
+- ✅ React
+- ✅ Angular
+- ✅ JavaScript/TypeScript
+- ✅ HTML
+- ✅ And more...
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+**Enjoy internationalizing your apps! 🌟**
