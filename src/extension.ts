@@ -114,7 +114,7 @@ async function extractFromSelection(detector: StringDetector) {
 async function showStringPreview(strings: ExtractableString[], document: vscode.TextDocument) {
 	// Create quick pick items with preview of replacement
 	const items: vscode.QuickPickItem[] = strings.map((str, index) => {
-		const preview = StringReplacer.previewReplacement(str);
+		const preview = StringReplacer.previewReplacement(str, document.uri);
 		return {
 			label: `"${str.text}"`,
 			description: `→ ${preview}`,

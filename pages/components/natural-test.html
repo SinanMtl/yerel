@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ $t('components.naturaltest.natural') }}</title>
+</head>
+<body>
+    <h1>{{ $t('components.naturaltest.welcome') }}</h1>
+    <p>{{ $t('components.naturaltest.this') }}</p>
+    <button>{{ $t('components.naturaltest.click') }}</button>
+    <input type="text" placeholder="{{ $t('components.naturaltest.please') }}" />
+    
+    <script>
+        // These should be detected (natural language)
+        const userMessage = $t('components.naturaltest.hello');
+        const successAlert = $t('components.naturaltest.your');
+        const confirmText = $t('components.naturaltest.are');
+        console.log($t('components.naturaltest.processing'));
+        alert($t('components.naturaltest.thank'));
+        
+        // These should be ignored (code-like)
+        const apiUrl = "http://localhost:3000";
+        const userId = "user123";
+        const fileType = "json";
+        const configPath = "./config.js";
+        const API_KEY = "abc123";
+        import './styles.css';
+        const className = "btn-primary";
+        const isActive = "true";
+    </script>
+</body>
+</html>

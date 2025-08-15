@@ -1,10 +1,43 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { ExtractableString, TranslationEntry } from './types';
 import { ConfigManager } from './configManager';
 import { LocaleManager } from './localeManager';
 
 export class StringReplacer {
     
+    /**
+     * Generate key with file path information
+     */
+    private static generateKeyWithPath(text: string, documentUri: vscode.Uri): string {
+        const config = ConfigManager.getConfig();
+        const workspaceRoot = ConfigManager.getWorkspaceRoot();
+        
+        // Get relative path from workspace root
+        let relativePath = '';
+        if (workspaceRoot) {
+            const workspaceUri = vscode.Uri.file(workspaceRoot);
+            relativePath = vscode.workspace.asRelativePath(documentUri, false);
+        } else {
+            // Fallback to filename if no workspace
+            relativePath = path.basename(documentUri.fsPath);
+        }
+        
+        // Remove file extension and normalize path separators
+        const pathWithoutExtension = relativePath.replace(/\.[^/.]+$/, '');
+        const normalizedPath = pathWithoutExtension.replace(/[\\\/]/g, '.');
+        
+        // Get first word from text for the final key
+        const firstWord = text.trim().split(/\s+/)[0]
+            .toLowerCase()
+            .replace(/[^a-zA-Z0-9]/g, '')
+            .substring(0, 12); // Limit length
+        
+        // Combine path and first word
+        const pathKey = normalizedPath.toLowerCase().replace(/[^a-zA-Z0-9.]/g, '');
+        return `${pathKey}.${firstWord}`;
+    }
+
     /**
      * Replace selected strings with translation keys
      */
@@ -20,8 +53,8 @@ export class StringReplacer {
         const sortedStrings = [...strings].sort((a, b) => b.startPosition - a.startPosition);
 
         for (const str of sortedStrings) {
-            // Generate unique key
-            const baseKey = ConfigManager.formatKey(str.text);
+            // Generate unique key with file path
+            const baseKey = this.generateKeyWithPath(str.text, document.uri);
             const uniqueKey = await LocaleManager.generateUniqueKey(baseKey, document.uri);
             
             // Create translation entry
@@ -84,9 +117,17 @@ export class StringReplacer {
     /**
      * Preview replacement for a single string
      */
-    public static previewReplacement(str: ExtractableString): string {
+    public static previewReplacement(str: ExtractableString, documentUri?: vscode.Uri): string {
         const config = ConfigManager.getConfig();
-        const key = ConfigManager.formatKey(str.text);
+        let key: string;
+        
+        if (documentUri) {
+            key = this.generateKeyWithPath(str.text, documentUri);
+        } else {
+            // Fallback to old key generation for preview
+            key = ConfigManager.formatKey(str.text);
+        }
+        
         return this.generateReplacementText(key, str, config);
     }
 }
