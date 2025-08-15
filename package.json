@@ -1,8 +1,10 @@
 {
   "name": "yerel",
   "displayName": "yerel",
-  "description": "yerel description",
+  "description": "Extract strings for i18n translation",
   "version": "0.0.1",
+  "publisher": "ateam",
+  "icon": "icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/SinanMtl/yerel.git"

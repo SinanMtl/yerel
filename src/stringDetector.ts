@@ -43,12 +43,27 @@ export class StringDetector {
     private detectHtmlStrings(content: string, document: vscode.TextDocument): ExtractableString[] {
         const strings: ExtractableString[] = [];
         
+        // First, remove script and style tag contents to avoid extracting from them
+        let cleanContent = content;
+        
+        // Remove style tag contents (including the tags themselves)
+        cleanContent = cleanContent.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, (match) => {
+            // Replace with same amount of whitespace to preserve positions
+            return ' '.repeat(match.length);
+        });
+        
+        // Remove CSS inside style attributes
+        cleanContent = cleanContent.replace(/style\s*=\s*["'][^"']*["']/gi, (match) => {
+            // Replace with same amount of whitespace to preserve positions
+            return ' '.repeat(match.length);
+        });
+        
         // Pattern for text content inside HTML tags
         // Matches: <tag>Some text here</tag>
         const htmlTextRegex = />([^<>]+)</g;
         
         let match;
-        while ((match = htmlTextRegex.exec(content)) !== null) {
+        while ((match = htmlTextRegex.exec(cleanContent)) !== null) {
             const text = match[1].trim();
             if (text && !this.isIgnorableText(text) && !this.isAlreadyTranslated(text, match.index + 1, content)) {
                 const position = document.positionAt(match.index + 1);
@@ -67,11 +82,11 @@ export class StringDetector {
             }
         }
 
-        // Pattern for attribute values
-        // Matches: placeholder="Some text", title="Some text", etc.
-        const attrRegex = /(?:placeholder|title|alt|aria-label|data-tooltip)\s*=\s*["']([^"']+)["']/g;
+        // Pattern for translatable attribute values (but not style attributes)
+        // Matches: placeholder="Some text", title="Some text", alt="Some text", etc.
+        const attrRegex = /(?:placeholder|title|alt|aria-label|data-tooltip|data-title|tooltip)\s*=\s*["']([^"']+)["']/g;
         
-        while ((match = attrRegex.exec(content)) !== null) {
+        while ((match = attrRegex.exec(cleanContent)) !== null) {
             const text = match[1].trim();
             if (text && !this.isIgnorableText(text) && !this.isAlreadyTranslated(text, match.index + match[0].indexOf(text), content)) {
                 const position = document.positionAt(match.index + match[0].indexOf(text));
