@@ -1,3 +1,6 @@
+declare global {
+    var __yerelKeyValueMap: Record<string, string> | undefined;
+}
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { ExtractableString, TranslationEntry } from './types';
@@ -69,7 +72,24 @@ export class StringReplacer {
 
                 // Generate unique key with file path
                 const baseKey = this.generateKeyWithPath(str.text, document.uri);
-                const uniqueKey = await LocaleManager.generateUniqueKey(baseKey, document.uri);
+
+                // Batch içi key-value eşleşmelerini kontrol etmek için static bir map
+                if (!globalThis.__yerelKeyValueMap) {
+                    globalThis.__yerelKeyValueMap = {};
+                }
+                const keyValueMap = globalThis.__yerelKeyValueMap;
+
+                let uniqueKey = baseKey;
+                let counter = 1;
+                // Önce batch içi kontrol
+                while (
+                    (keyValueMap[uniqueKey] && keyValueMap[uniqueKey] !== str.text) ||
+                    (await LocaleManager.generateUniqueKey(uniqueKey, str.text, document.uri)) !== uniqueKey
+                ) {
+                    uniqueKey = `${baseKey}_${counter}`;
+                    counter++;
+                }
+                keyValueMap[uniqueKey] = str.text;
                 
                 // Create translation entry (this will show its own progress for OpenAI)
                 const translationEntry = await LocaleManager.generateTranslations(str.text, uniqueKey);

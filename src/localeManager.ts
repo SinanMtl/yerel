@@ -232,18 +232,40 @@ export class LocaleManager {
     }
 
     /**
-     * Generate unique key if the provided key already exists
+     * Generate unique key if the provided key already exists with different value
      */
-    public static async generateUniqueKey(baseKey: string, currentFileUri?: vscode.Uri): Promise<string> {
+    public static async generateUniqueKey(baseKey: string, value: string, currentFileUri?: vscode.Uri): Promise<string> {
         let key = baseKey;
         let counter = 1;
 
-        while (await this.keyExists(key, currentFileUri)) {
-            key = `${baseKey}${counter}`;
+        while (await this.keyExistsWithDifferentValue(key, value, currentFileUri)) {
+            key = `${baseKey}_${counter}`;
             counter++;
         }
 
         return key;
+    }
+
+    /**
+     * Check if key exists with a different value than the one we want to set
+     */
+    private static async keyExistsWithDifferentValue(key: string, value: string, currentFileUri?: vscode.Uri): Promise<boolean> {
+        const localesPath = ConfigManager.getLocalesFullPath(currentFileUri);
+        if (!localesPath) { return false; }
+
+        const enFilePath = path.join(localesPath, 'en.json');
+        if (fs.existsSync(enFilePath)) {
+            try {
+                const content = fs.readFileSync(enFilePath, 'utf8');
+                const translations = JSON.parse(content);
+                if (translations.hasOwnProperty(key)) {
+                    return translations[key] !== value;
+                }
+            } catch (error) {
+                console.warn(`Failed to read ${enFilePath}:`, error);
+            }
+        }
+        return false;
     }
 
     /**
