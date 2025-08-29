@@ -7,342 +7,292 @@ import { TranslationEntry } from './types';
 import { GoogleSheetsService } from './googleSheetsService';
 
 export class LocaleManager {
-    
-    /**
-     * Save translations to locale files
-     */
-    public static async saveTranslations(entries: TranslationEntry[], currentFileUri: vscode.Uri): Promise<void> {
-        const localesPath = ConfigManager.getLocalesFullPath(currentFileUri);
-        if (!localesPath) {
-            throw new Error('Could not determine locales path');
-        }
 
-        // Ensure locales directory exists
-        await this.ensureDirectoryExists(localesPath);
+  /**
+   * Save translations to locale files
+   */
+  public static async saveTranslations(entries: TranslationEntry[], currentFileUri: vscode.Uri): Promise<void> {
+    const localesPath = ConfigManager.getLocalesFullPath(currentFileUri);
+    if (!localesPath) {
+      throw new Error('Could not determine locales path');
+    }
 
-        const config = ConfigManager.getConfig();
-        const updatedLanguages: string[] = [];
-        
-        // Process each language
-        for (const lang of config.supportedLanguages) {
-            const filePath = path.join(localesPath, `${lang}.json`);
-            try {
-                await this.updateLocaleFile(filePath, entries, lang);
-                updatedLanguages.push(lang);
-            } catch (error) {
-                throw new Error(`Failed to update ${lang}.json: ${error}`);
-            }
-        }
+    // Ensure locales directory exists
+    await this.ensureDirectoryExists(localesPath);
 
-        // Google Sheets export if enabled (non-blocking)
-        this.exportToGoogleSheetsIfEnabled(entries).catch(error => {
-            console.error('Google Sheets export error:', error);
+    const config = ConfigManager.getConfig();
+    const updatedLanguages: string[] = [];
+
+    // Process each language
+    for (const lang of config.supportedLanguages) {
+      const filePath = path.join(localesPath, `${lang}.json`);
+      try {
+        await this.updateLocaleFile(filePath, entries, lang);
+        updatedLanguages.push(lang);
+      } catch (error) {
+        throw new Error(`Failed to update ${lang}.json: ${error}`);
+      }
+    }
+
+    // Google Sheets export if enabled (non-blocking)
+    this.exportToGoogleSheetsIfEnabled(entries).catch(error => {
+      console.error('Google Sheets export error:', error);
+    });
+  }
+
+  /**
+   * Export to Google Sheets if enabled and configured
+   */
+  private static async exportToGoogleSheetsIfEnabled(entries: TranslationEntry[]): Promise<void> {
+    const config = ConfigManager.getConfig();
+
+    if (!config.googleSheets?.enabled) {
+      return; // Google Sheets not enabled
+    }
+
+    try {
+      if (!GoogleSheetsService.isConfigured()) {
+        vscode.window.showWarningMessage(
+          '⚠️ Google Sheets is enabled but not properly configured. Please check your settings.',
+          'Open Settings'
+        ).then(choice => {
+          if (choice === 'Open Settings') {
+            vscode.commands.executeCommand('workbench.action.openSettings', 'yerel.googleSheets');
+          }
         });
+        return;
+      }
+
+      await GoogleSheetsService.exportToSheets(entries);
+    } catch (error) {
+      console.error('Google Sheets export error:', error);
+      vscode.window.showErrorMessage(
+        `❌ Failed to export to Google Sheets: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Update a specific locale file
+   */
+  private static async updateLocaleFile(filePath: string, entries: TranslationEntry[], language: string): Promise<void> {
+    let existingTranslations: Record<string, any> = {};
+
+    // Read existing file if it exists
+    if (fs.existsSync(filePath)) {
+      try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        existingTranslations = JSON.parse(content);
+      } catch (error) {
+        console.warn(`Failed to parse existing locale file ${filePath}:`, error);
+      }
     }
 
-    /**
-     * Export to Google Sheets if enabled and configured
-     */
-    private static async exportToGoogleSheetsIfEnabled(entries: TranslationEntry[]): Promise<void> {
-        const config = ConfigManager.getConfig();
-        
-        if (!config.googleSheets?.enabled) {
-            return; // Google Sheets not enabled
-        }
+    // Add new translations
+    for (const entry of entries) {
+      const translation = entry.translations[language] || entry.translations['en'] || entry.key;
+      // Use nested structure for dot notation keys
+      this.setNestedValue(existingTranslations, entry.key, translation);
+    }
 
-        try {
-            if (!GoogleSheetsService.isConfigured()) {
-                vscode.window.showWarningMessage(
-                    '⚠️ Google Sheets is enabled but not properly configured. Please check your settings.',
-                    'Open Settings'
-                ).then(choice => {
-                    if (choice === 'Open Settings') {
-                        vscode.commands.executeCommand('workbench.action.openSettings', 'yerel.googleSheets');
-                    }
-                });
-                return;
-            }
+    // Write updated translations
+    const sortedTranslations = this.sortObjectKeys(existingTranslations);
+    const content = JSON.stringify(sortedTranslations, null, 2);
 
-            await GoogleSheetsService.exportToSheets(entries);
-        } catch (error) {
-            console.error('Google Sheets export error:', error);
-            vscode.window.showErrorMessage(
-                `❌ Failed to export to Google Sheets: ${error instanceof Error ? error.message : 'Unknown error'}`
+    try {
+      fs.writeFileSync(filePath, content, 'utf8');
+      console.log(`Successfully updated ${path.basename(filePath)} with ${entries.length} translation(s)`);
+    } catch (error) {
+      throw new Error(`Failed to write file ${filePath}: ${error}`);
+    }
+  }
+
+  /**
+   * Set nested value in object using dot notation
+   */
+  private static setNestedValue(obj: any, key: string, value: string): void {
+    const keys = key.split('.');
+    let current = obj;
+
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (!(keys[i] in current) || typeof current[keys[i]] !== 'object') {
+        current[keys[i]] = {};
+      }
+      current = current[keys[i]];
+    }
+
+    current[keys[keys.length - 1]] = value;
+  }
+
+  /**
+   * Sort object keys recursively for consistent file output
+   */
+  private static sortObjectKeys(obj: any): any {
+    if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+      return obj;
+    }
+
+    const sortedObj: any = {};
+    const sortedKeys = Object.keys(obj).sort();
+
+    for (const key of sortedKeys) {
+      sortedObj[key] = this.sortObjectKeys(obj[key]);
+    }
+
+    return sortedObj;
+  }
+
+  /**
+   * Ensure directory exists, create if it doesn't
+   */
+  private static async ensureDirectoryExists(dirPath: string): Promise<void> {
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+  }
+
+  /**
+   * Generate translations for different languages
+   */
+  public static async generateTranslations(originalText: string, key: string): Promise<TranslationEntry> {
+    const config = ConfigManager.getConfig();
+    const translations: Record<string, string> = {};
+
+    // Set English as the base language
+    translations['en'] = originalText;
+
+    // If OpenAI is enabled, translate to other languages in one API call
+    if (config.openai?.enabled && OpenAIService.isConfigured()) {
+      console.log('🤖 OpenAI enabled, generating batch translations...');
+
+      // Get target languages (exclude English)
+      const targetLanguages = config.supportedLanguages.filter(lang => lang !== 'en');
+
+      if (targetLanguages.length > 0) {
+        // Show progress indicator while translating
+        const batchTranslations = await vscode.window.withProgress({
+          location: vscode.ProgressLocation.Notification,
+          title: `🤖 Translating "${originalText.substring(0, 30)}${originalText.length > 30 ? '...' : ''}"`,
+          cancellable: false
+        }, async (progress) => {
+          progress.report({
+            increment: 0,
+            message: `to ${targetLanguages.length} languages using OpenAI...`
+          });
+
+          try {
+            const result = await OpenAIService.translateToMultipleLanguages(
+              originalText,
+              targetLanguages
             );
+
+            progress.report({
+              increment: 100,
+              message: '✅ Translations completed!'
+            });
+
+            return result;
+
+          } catch (error) {
+            progress.report({
+              increment: 100,
+              message: '❌ Translation failed, using fallback...'
+            });
+
+            console.error('Error in batch translation:', error);
+            // Fallback to original text for all languages
+            const fallback: Record<string, string> = {};
+            for (const lang of targetLanguages) {
+              fallback[lang] = originalText;
+            }
+            return fallback;
+          }
+        });
+
+        // Merge batch translations
+        Object.assign(translations, batchTranslations);
+
+        console.log(`✅ Batch translated to ${targetLanguages.length} languages:`, batchTranslations);
+      }
+    } else {
+      // No OpenAI, use original text for all languages
+      for (const lang of config.supportedLanguages) {
+        if (lang !== 'en') {
+          translations[lang] = originalText;
         }
+      }
     }
 
-    /**
-     * Update a specific locale file
-     */
-    private static async updateLocaleFile(filePath: string, entries: TranslationEntry[], language: string): Promise<void> {
-        let existingTranslations: Record<string, any> = {};
+    return {
+      key,
+      translations
+    };
+  }
 
-        // Read existing file if it exists
-        if (fs.existsSync(filePath)) {
-            try {
-                const content = fs.readFileSync(filePath, 'utf8');
-                existingTranslations = JSON.parse(content);
-            } catch (error) {
-                console.warn(`Failed to parse existing locale file ${filePath}:`, error);
-            }
-        }
+  /**
+   * Check if a key already exists in any locale file
+   */
+  public static async keyExists(key: string, currentFileUri?: vscode.Uri): Promise<boolean> {
+    const localesPath = ConfigManager.getLocalesFullPath(currentFileUri);
+    if (!localesPath) { return false; }
 
-        // Add new translations
-        for (const entry of entries) {
-            const translation = entry.translations[language] || entry.translations['en'] || entry.key;
-            // Use nested structure for dot notation keys
-            this.setNestedValue(existingTranslations, entry.key, translation);
-        }
+    const config = ConfigManager.getConfig();
 
-                // Write updated translations
-        const sortedTranslations = this.sortObjectKeys(existingTranslations);
-        const content = JSON.stringify(sortedTranslations, null, 2);
-        
+    for (const lang of config.supportedLanguages) {
+      const filePath = path.join(localesPath, `${lang}.json`);
+
+      if (fs.existsSync(filePath)) {
         try {
-            fs.writeFileSync(filePath, content, 'utf8');
-            console.log(`Successfully updated ${path.basename(filePath)} with ${entries.length} translation(s)`);
+          const content = fs.readFileSync(filePath, 'utf8');
+          const translations = JSON.parse(content);
+
+          // Check for flat key existence
+          if (translations.hasOwnProperty(key)) {
+            return true;
+          }
         } catch (error) {
-            throw new Error(`Failed to write file ${filePath}: ${error}`);
+          // Continue checking other files
         }
+      }
     }
 
-    /**
-     * Set nested value in object using dot notation
-     */
-    private static setNestedValue(obj: any, key: string, value: string): void {
-        const keys = key.split('.');
-        let current = obj;
+    return false;
+  }
 
-        for (let i = 0; i < keys.length - 1; i++) {
-            if (!(keys[i] in current) || typeof current[keys[i]] !== 'object') {
-                current[keys[i]] = {};
-            }
-            current = current[keys[i]];
-        }
+  /**
+   * Generate unique key if the provided key already exists with different value
+   */
+  public static async generateUniqueKey(baseKey: string, value: string, currentFileUri?: vscode.Uri): Promise<string> {
+    let key = baseKey;
+    let counter = 1;
 
-        current[keys[keys.length - 1]] = value;
+    while (await this.keyExistsWithDifferentValue(key, value, currentFileUri)) {
+      key = `${baseKey}_${counter}`;
+      counter++;
     }
 
-    /**
-     * Sort object keys recursively for consistent file output
-     */
-    private static sortObjectKeys(obj: any): any {
-        if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
-            return obj;
+    return key;
+  }
+
+  /**
+   * Check if key exists with a different value than the one we want to set
+   */
+  private static async keyExistsWithDifferentValue(key: string, value: string, currentFileUri?: vscode.Uri): Promise<boolean> {
+    const localesPath = ConfigManager.getLocalesFullPath(currentFileUri);
+    if (!localesPath) { return false; }
+
+    const enFilePath = path.join(localesPath, 'en.json');
+    if (fs.existsSync(enFilePath)) {
+      try {
+        const content = fs.readFileSync(enFilePath, 'utf8');
+        const translations = JSON.parse(content);
+        if (translations.hasOwnProperty(key)) {
+          return translations[key] !== value;
         }
-
-        const sortedObj: any = {};
-        const sortedKeys = Object.keys(obj).sort();
-
-        for (const key of sortedKeys) {
-            sortedObj[key] = this.sortObjectKeys(obj[key]);
-        }
-
-        return sortedObj;
+      } catch (error) {
+        console.warn(`Failed to read ${enFilePath}:`, error);
+      }
     }
-
-    /**
-     * Ensure directory exists, create if it doesn't
-     */
-    private static async ensureDirectoryExists(dirPath: string): Promise<void> {
-        if (!fs.existsSync(dirPath)) {
-            fs.mkdirSync(dirPath, { recursive: true });
-        }
-    }
-
-    /**
-     * Generate translations for different languages
-     */
-    public static async generateTranslations(originalText: string, key: string): Promise<TranslationEntry> {
-        const config = ConfigManager.getConfig();
-        const translations: Record<string, string> = {};
-        
-        // Set English as the base language
-        translations['en'] = originalText;
-        
-        // If OpenAI is enabled, translate to other languages in one API call
-        if (config.openai?.enabled && OpenAIService.isConfigured()) {
-            console.log('🤖 OpenAI enabled, generating batch translations...');
-            
-            // Get target languages (exclude English)
-            const targetLanguages = config.supportedLanguages.filter(lang => lang !== 'en');
-            
-            if (targetLanguages.length > 0) {
-                // Show progress indicator while translating
-                const batchTranslations = await vscode.window.withProgress({
-                    location: vscode.ProgressLocation.Notification,
-                    title: `🤖 Translating "${originalText.substring(0, 30)}${originalText.length > 30 ? '...' : ''}"`,
-                    cancellable: false
-                }, async (progress) => {
-                    progress.report({ 
-                        increment: 0, 
-                        message: `to ${targetLanguages.length} languages using OpenAI...` 
-                    });
-
-                    try {
-                        const result = await OpenAIService.translateToMultipleLanguages(
-                            originalText, 
-                            targetLanguages
-                        );
-                        
-                        progress.report({ 
-                            increment: 100, 
-                            message: '✅ Translations completed!' 
-                        });
-                        
-                        return result;
-                        
-                    } catch (error) {
-                        progress.report({ 
-                            increment: 100, 
-                            message: '❌ Translation failed, using fallback...' 
-                        });
-                        
-                        console.error('Error in batch translation:', error);
-                        // Fallback to original text for all languages
-                        const fallback: Record<string, string> = {};
-                        for (const lang of targetLanguages) {
-                            fallback[lang] = originalText;
-                        }
-                        return fallback;
-                    }
-                });
-                
-                // Merge batch translations
-                Object.assign(translations, batchTranslations);
-                
-                console.log(`✅ Batch translated to ${targetLanguages.length} languages:`, batchTranslations);
-            }
-        } else {
-            // No OpenAI, use original text for all languages
-            for (const lang of config.supportedLanguages) {
-                if (lang !== 'en') {
-                    translations[lang] = originalText;
-                }
-            }
-        }
-
-        return {
-            key,
-            translations
-        };
-    }
-
-    /**
-     * Check if a key already exists in any locale file
-     */
-    public static async keyExists(key: string, currentFileUri?: vscode.Uri): Promise<boolean> {
-        const localesPath = ConfigManager.getLocalesFullPath(currentFileUri);
-        if (!localesPath) { return false; }
-
-        const config = ConfigManager.getConfig();
-        
-        for (const lang of config.supportedLanguages) {
-            const filePath = path.join(localesPath, `${lang}.json`);
-            
-            if (fs.existsSync(filePath)) {
-                try {
-                    const content = fs.readFileSync(filePath, 'utf8');
-                    const translations = JSON.parse(content);
-                    
-                    // Check for flat key existence
-                    if (translations.hasOwnProperty(key)) {
-                        return true;
-                    }
-                } catch (error) {
-                    // Continue checking other files
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Generate unique key if the provided key already exists with different value
-     */
-    public static async generateUniqueKey(baseKey: string, value: string, currentFileUri?: vscode.Uri): Promise<string> {
-        let key = baseKey;
-        let counter = 1;
-
-        while (await this.keyExistsWithDifferentValue(key, value, currentFileUri)) {
-            key = `${baseKey}_${counter}`;
-            counter++;
-        }
-
-        return key;
-    }
-
-    /**
-     * Check if key exists with a different value than the one we want to set
-     */
-    private static async keyExistsWithDifferentValue(key: string, value: string, currentFileUri?: vscode.Uri): Promise<boolean> {
-        const localesPath = ConfigManager.getLocalesFullPath(currentFileUri);
-        if (!localesPath) { return false; }
-
-        const enFilePath = path.join(localesPath, 'en.json');
-        if (fs.existsSync(enFilePath)) {
-            try {
-                const content = fs.readFileSync(enFilePath, 'utf8');
-                const translations = JSON.parse(content);
-                if (translations.hasOwnProperty(key)) {
-                    return translations[key] !== value;
-                }
-            } catch (error) {
-                console.warn(`Failed to read ${enFilePath}:`, error);
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Get display names for languages
-     */
-    private static getLanguageDisplayNames(): Record<string, string> {
-        return {
-            'en': 'English',
-            'tr': 'Turkish', 
-            'ru': 'Russian',
-            'id': 'Indonesian',
-            'es': 'Spanish',
-            'fr': 'French',
-            'de': 'German',
-            'ja': 'Japanese',
-            'ko': 'Korean',
-            'zh': 'Chinese',
-            'it': 'Italian',
-            'pt': 'Portuguese',
-            'ar': 'Arabic',
-            'hi': 'Hindi',
-            'th': 'Thai',
-            'vi': 'Vietnamese',
-            'nl': 'Dutch',
-            'pl': 'Polish',
-            'sv': 'Swedish',
-            'da': 'Danish',
-            'no': 'Norwegian',
-            'fi': 'Finnish',
-            'cs': 'Czech',
-            'hu': 'Hungarian',
-            'ro': 'Romanian',
-            'bg': 'Bulgarian',
-            'hr': 'Croatian',
-            'sk': 'Slovak',
-            'sl': 'Slovenian',
-            'et': 'Estonian',
-            'lv': 'Latvian',
-            'lt': 'Lithuanian',
-            'uk': 'Ukrainian',
-            'be': 'Belarusian',
-            'kk': 'Kazakh',
-            'uz': 'Uzbek',
-            'ky': 'Kyrgyz',
-            'tg': 'Tajik',
-            'mn': 'Mongolian',
-            'ka': 'Georgian',
-            'hy': 'Armenian',
-            'az': 'Azerbaijani'
-        };
-    }
+    return false;
+  }
 }
