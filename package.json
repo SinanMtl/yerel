@@ -2,7 +2,7 @@
   "name": "yerel",
   "displayName": "yerel",
   "description": "Extract strings for i18n translation",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "ateam",
   "icon": "icon.png",
   "type": "commonjs",
