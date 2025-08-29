@@ -286,7 +286,7 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "@sinanmtl/doc-parser": "^1.1.1",
+    "@sinanmtl/doc-parser": "^1.1.3",
     "googleapis": "^156.0.0"
   }
 }
