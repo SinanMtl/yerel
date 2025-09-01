@@ -292,10 +292,10 @@
   resolved "https://registry.yarnpkg.com/@pkgjs/parseargs/-/parseargs-0.11.0.tgz#a77ea742fab25775145434eb1d2328cf5013ac33"
   integrity sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==
 
-"@sinanmtl/doc-parser@^1.1.3":
-  version "1.1.3"
-  resolved "https://registry.yarnpkg.com/@sinanmtl/doc-parser/-/doc-parser-1.1.3.tgz#135cf1614621134a72bffce814abde20790ef1e3"
-  integrity sha512-zrvAL2mPVE/xviSXQjKNluuikxazwAmRuZBe8DdBvZaMvBcskYMUoJVrHn26nKf+AOrjo39qECtiMBrl874LaQ==
+"@sinanmtl/doc-parser@^1.1.4":
+  version "1.1.4"
+  resolved "https://registry.yarnpkg.com/@sinanmtl/doc-parser/-/doc-parser-1.1.4.tgz#26ac10f8f7a6fb74baff1e247d38f47a963f2f1a"
+  integrity sha512-8aGCE7Xg6Ox803cPE9m356DRzhDmCYAcmAtBeJxx5M/+WDQS5rLgbTfD5ZoHOpGat1ogj9ZduC9TX5BXVBozLQ==
 
 "@types/estree@^1.0.6":
   version "1.0.8"
