@@ -43,7 +43,7 @@ export class LocaleManager {
   /**
    * Export to Google Sheets if enabled and configured
    */
-  private static async exportToGoogleSheetsIfEnabled(entries: TranslationEntry[]): Promise<void> {
+  static async exportToGoogleSheetsIfEnabled(entries: TranslationEntry[]): Promise<void> {
     const config = ConfigManager.getConfig();
 
     if (!config.googleSheets?.enabled) {

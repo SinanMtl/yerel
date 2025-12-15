@@ -13,6 +13,18 @@ export interface TranslationResponse {
   error?: string;
 }
 
+export interface KeyValueTranslationRequest {
+  entries: Record<string, string>; // key.path.foo="text" format
+  targetLanguage: string;
+  sourceLanguage?: string;
+}
+
+export interface KeyValueTranslationResponse {
+  translations: Record<string, any>; // nested JSON structure
+  success: boolean;
+  error?: string;
+}
+
 export class OpenAIService {
   private static readonly OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
@@ -63,7 +75,7 @@ export class OpenAIService {
 
       if (!response.ok) {
         const errorData = await response.json() as any;
-        throw new Error(`OpenAI API error: ${errorData.error?.message || response.statusText}`);
+        this.handleAPIError(response, errorData);
       }
 
       const data = await response.json() as any;
@@ -151,7 +163,7 @@ Return translations in JSON format with language codes as keys.`;
 
       if (!response.ok) {
         const errorData = await response.json() as any;
-        throw new Error(`OpenAI API error: ${errorData.error?.message || response.statusText}`);
+        this.handleAPIError(response, errorData);
       }
 
       const data = await response.json() as any;
@@ -312,5 +324,199 @@ Rules:
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
+  }
+
+  /**
+   * Translate key-value pairs in batch for a specific language
+   * Input format: { "landing.address": "Address", "landing.our": "Our Services" }
+   * Output format: nested JSON structure
+   */
+  public static async translateKeyValuePairs(request: KeyValueTranslationRequest): Promise<KeyValueTranslationResponse> {
+    if (!this.isConfigured()) {
+      return {
+        translations: this.convertToNestedJson(request.entries),
+        success: false,
+        error: 'OpenAI is not configured. Please check your settings.'
+      };
+    }
+
+    const config = ConfigManager.getConfig();
+    const apiKey = config.openai?.apiKey;
+    const model = config.openai?.model || 'gpt-3.5-turbo';
+
+    try {
+      const languageNames = this.getLanguageNames();
+      const sourceLang = request.sourceLanguage || 'en';
+      const targetLangName = languageNames[request.targetLanguage] || request.targetLanguage;
+      const sourceLangName = languageNames[sourceLang] || sourceLang;
+
+      // Format input for OpenAI
+      const formattedEntries = Object.entries(request.entries)
+        .map(([key, value]) => `${key}="${value}"`)
+        .join('\n');
+
+      const systemPrompt = `You are a professional translator. You will receive translation key-value pairs in a specific format and need to translate them to ${targetLangName}.
+
+Rules:
+- Input format: key.path.foo="text"
+- Output format: key.path.foo="translated text"
+- Maintain the exact same key structure
+- Translate ONLY the text values (content inside quotes)
+- Preserve special formatting, quotes, and placeholders in the text
+- Use natural, user-friendly language for UI text
+- Return ONLY the translated key-value pairs, no explanations
+
+Example:
+Input:
+landing.address="Address"
+landing.our="Our Services"
+
+Output:
+landing.address="Adres"
+landing.our="Servislerimiz"`;
+
+      const userPrompt = `Translate these key-value pairs from ${sourceLangName} to ${targetLangName}:
+
+${formattedEntries}
+
+Return the translations in the same format with translated text values.`;
+
+      const response = await fetch(this.OPENAI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          max_tokens: 2000,
+          temperature: 0.2
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json() as any;
+        this.handleAPIError(response, errorData);
+      }
+
+      const data = await response.json() as any;
+      const translationsText = data.choices[0]?.message?.content?.trim();
+
+      if (!translationsText) {
+        throw new Error('No translation received from OpenAI');
+      }
+
+      // Parse the key-value pairs from OpenAI response
+      const translatedEntries = this.parseKeyValueResponse(translationsText);
+      
+      // Convert to nested JSON structure
+      const nestedTranslations = this.convertToNestedJson(translatedEntries);
+
+      return {
+        translations: nestedTranslations,
+        success: true
+      };
+
+    } catch (error) {
+      console.error('OpenAI key-value translation error:', error);
+      
+      // Fallback to original values
+      const fallbackTranslations = this.convertToNestedJson(request.entries);
+      
+      return {
+        translations: fallbackTranslations,
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
+    }
+  }
+
+  /**
+   * Parse key-value response from OpenAI
+   * Input: 'landing.address="Adres"\nlanding.our="Servislerimiz"'
+   * Output: { "landing.address": "Adres", "landing.our": "Servislerimiz" }
+   */
+  private static parseKeyValueResponse(response: string): Record<string, string> {
+    const result: Record<string, string> = {};
+    const lines = response.split('\n').filter(line => line.trim());
+
+    for (const line of lines) {
+      const match = line.match(/^([^=]+)="([^"]*)"$/);
+      if (match) {
+        const key = match[1].trim();
+        const value = match[2];
+        result[key] = value;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Convert flat key-value pairs to nested JSON structure
+   * Input: { "landing.address": "Adres", "hello.world.here": "Merhaba Dünya" }
+   * Output: { landing: { address: "Adres" }, hello: { world: { here: "Merhaba Dünya" } } }
+   */
+  private static convertToNestedJson(flatObject: Record<string, string>): Record<string, any> {
+    const result: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(flatObject)) {
+      const keys = key.split('.');
+      let current = result;
+
+      // Navigate/create the nested structure
+      for (let i = 0; i < keys.length - 1; i++) {
+        const currentKey = keys[i];
+        if (!(currentKey in current)) {
+          current[currentKey] = {};
+        }
+        current = current[currentKey];
+      }
+
+      // Set the final value
+      const finalKey = keys[keys.length - 1];
+      current[finalKey] = value;
+    }
+
+    return result;
+  }
+
+  /**
+   * Handle OpenAI API response errors with specific error types
+   */
+  private static handleAPIError(response: Response, errorData: any): never {
+    const errorMessage = errorData.error?.message || response.statusText;
+    const errorCode = errorData.error?.code;
+    
+    // Special handling for quota errors
+    if (response.status === 429 || errorCode === 'insufficient_quota' || errorMessage.includes('quota')) {
+      throw new Error(`🚫 `+ errorMessage);
+    }
+    
+    // Special handling for rate limits
+    if (response.status === 429 || errorCode === 'rate_limit_exceeded') {
+      throw new Error(`⏱️ `+ errorMessage);
+    }
+    
+    // Special handling for invalid API key
+    if (response.status === 401 || errorCode === 'invalid_api_key') {
+      throw new Error(`🔑 `+ errorMessage);
+    }
+    
+    // Special handling for model not found
+    if (response.status === 404 || errorCode === 'model_not_found') {
+      throw new Error(`🤖 `+ errorMessage);
+    }
+    
+    // Special handling for context length exceeded
+    if (errorCode === 'context_length_exceeded') {
+      throw new Error(`📏 ` + errorMessage);
+    }
+    
+    throw new Error(`OpenAI API error: ${errorMessage}`);
   }
 }

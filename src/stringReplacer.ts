@@ -8,6 +8,7 @@ import { ExtractedText } from '@sinanmtl/doc-parser';
 import { TranslationEntry } from './types';
 import { ConfigManager } from './configManager';
 import { LocaleManager } from './localeManager';
+import { OpenAIService } from './openaiService';
 
 export class StringReplacer {
   /**
@@ -55,30 +56,28 @@ export class StringReplacer {
       title: `🌍 Extracting ${strings.length} string(s) to i18n`,
       cancellable: false
     }, async (progress) => {
-      const translationEntries: TranslationEntry[] = [];
       const edits: vscode.WorkspaceEdit = new vscode.WorkspaceEdit();
 
       // Sort strings by position (reverse order to maintain correct positions during replacement)
       const sortedStrings = [...strings].sort((a, b) => b.absoluteStart - a.absoluteStart);
 
-      for (let i = 0; i < sortedStrings.length; i++) {
-        const str = sortedStrings[i];
+      progress.report({
+        increment: 10,
+        message: 'Generating unique keys...'
+      });
 
-        progress.report({
-          increment: (50 / sortedStrings.length), // First 50% for key generation
-          message: `Generating key for "${str.text.substring(0, 20)}${str.text.length > 20 ? '...' : ''}"`
-        });
+      // Step 1: Generate unique keys for all strings
+      const keyValuePairs: Record<string, string> = {};
+      
+      // Batch içi key-value eşleşmelerini kontrol etmek için static bir map
+      if (!globalThis.__yerelKeyValueMap) {
+        globalThis.__yerelKeyValueMap = {};
+      }
+      const keyValueMap = globalThis.__yerelKeyValueMap;
 
+      for (const str of sortedStrings) {
         // Generate unique key with file path
         const baseKey = this.generateKeyWithPath(str.text, document.uri);
-
-        // Batch içi key-value eşleşmelerini kontrol etmek için static bir map
-        if (!globalThis.__yerelKeyValueMap) {
-          globalThis.__yerelKeyValueMap = {};
-        }
-
-        const keyValueMap = globalThis.__yerelKeyValueMap;
-
         let uniqueKey = baseKey;
         let counter = 1;
 
@@ -92,10 +91,96 @@ export class StringReplacer {
         }
 
         keyValueMap[uniqueKey] = str.text;
+        keyValuePairs[uniqueKey] = str.text;
+      }
 
-        // Create translation entry (this will show its own progress for OpenAI)
-        const translationEntry = await LocaleManager.generateTranslations(str.text, uniqueKey);
-        translationEntries.push(translationEntry);
+      progress.report({
+        increment: 20,
+        message: 'Translating to all languages using OpenAI...'
+      });
+
+      // Step 2: Batch translate all key-value pairs if OpenAI is enabled
+      const translationsByLanguage: Record<string, Record<string, any>> = {};
+      
+      if (config.openai?.enabled && OpenAIService.isConfigured()) {
+        const targetLanguages = config.supportedLanguages.filter(lang => lang !== 'en');
+        
+        // Translate to each language using batch API
+        for (const targetLang of targetLanguages) {
+          try {
+            console.log(`Translating batch to ${targetLang}...`, keyValuePairs);
+            const result = await OpenAIService.translateKeyValuePairs({
+              entries: keyValuePairs,
+              targetLanguage: targetLang,
+              sourceLanguage: 'en'
+            });
+
+            if (result.success) {
+              translationsByLanguage[targetLang] = result.translations;
+            } else {
+              console.warn(`Translation failed for ${targetLang}:`, result.error);
+              
+              // Show user-friendly error message for quota issues
+              if (result.error?.includes('quota')) {
+                vscode.window.showWarningMessage(
+                  `⚠️ OpenAI quota exceeded. Using original text for ${targetLang}. Please check your billing at https://platform.openai.com/account/billing`
+                );
+              } else if (result.error?.includes('rate limit')) {
+                vscode.window.showWarningMessage(
+                  `⚠️ OpenAI rate limit exceeded. Using original text for ${targetLang}. Please try again later.`
+                );
+              }
+              
+              // Fallback: use original texts in nested format
+              translationsByLanguage[targetLang] = this.convertToNestedJson(keyValuePairs);
+            }
+          } catch (error) {
+            console.error(`Batch translation error for ${targetLang}:`, error);
+            
+            // Show user-friendly error message
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            if (errorMessage.includes('quota')) {
+              vscode.window.showWarningMessage(
+                `⚠️ OpenAI quota exceeded. Using original text for ${targetLang}. Please check your billing.`
+              );
+            } else if (errorMessage.includes('rate limit')) {
+              vscode.window.showWarningMessage(
+                `⚠️ OpenAI rate limit exceeded. Using original text for ${targetLang}. Please try again later.`
+              );
+            } else if (errorMessage.includes('API key')) {
+              vscode.window.showErrorMessage(
+                `🔑 OpenAI API key issue: ${errorMessage}`
+              );
+            }
+            
+            // Fallback: use original texts in nested format
+            translationsByLanguage[targetLang] = this.convertToNestedJson(keyValuePairs);
+          }
+        }
+      } else {
+        // If OpenAI is not enabled, use original texts for all languages
+        const fallbackTranslations = this.convertToNestedJson(keyValuePairs);
+        for (const lang of config.supportedLanguages.filter(lang => lang !== 'en')) {
+          translationsByLanguage[lang] = fallbackTranslations;
+        }
+      }
+
+      // Add English translations (original texts)
+      translationsByLanguage['en'] = this.convertToNestedJson(keyValuePairs);
+
+      console.log('Translations by language:', translationsByLanguage);
+
+      progress.report({
+        increment: 30,
+        message: 'Preparing text replacements...'
+      });
+
+      // Step 3: Create text edits for all strings
+      for (const str of sortedStrings) {
+        const uniqueKey = Object.keys(keyValuePairs).find(key => keyValuePairs[key] === str.text);
+        if (!uniqueKey) {
+          continue;
+        }
 
         // Generate replacement text based on context
         const replacementText = this.generateReplacementText(uniqueKey, str, config, document);
@@ -151,7 +236,7 @@ export class StringReplacer {
         const range = new vscode.Range(startPos, endPos);
         
         // Validate the range
-        const finalActualText = document.getText(range);
+        /* const finalActualText = document.getText(range);
         if (finalActualText !== str.text && !this.isTextWithQuotes(finalActualText, str.text)) {
           console.warn(`Text mismatch for key "${uniqueKey}":`, {
             expected: str.text,
@@ -161,7 +246,7 @@ export class StringReplacer {
             endPos
           });
           // Continue anyway, but this might indicate a problem
-        }
+        } */
 
         edits.replace(document.uri, range, replacementText);
       }
@@ -172,11 +257,11 @@ export class StringReplacer {
       }
 
       progress.report({
-        increment: 25,
+        increment: 20,
         message: 'Applying text changes...'
       });
 
-      // Apply all edits with detailed error handling
+      // Step 4: Apply all edits
       try {
         const success = await vscode.workspace.applyEdit(edits);
 
@@ -186,12 +271,17 @@ export class StringReplacer {
             message: 'Saving translation files...'
           });
 
-          // Save translations to locale files
-          await LocaleManager.saveTranslations(translationEntries, document.uri);
+          // Convert translationsByLanguage to TranslationEntry array for compatibility
+          const translationEntries = this.convertToTranslationEntries(translationsByLanguage);
+
+          // Step 5: Save all translations to locale files at once
+          await this.saveBatchTranslations(translationsByLanguage, document.uri);
+          
+          await LocaleManager.exportToGoogleSheetsIfEnabled(translationEntries);
 
           // Complete the progress to 100%
           progress.report({
-            increment: 10,
+            increment: 5,
             message: 'Completed successfully!'
           });
         } else {
@@ -414,5 +504,179 @@ export class StringReplacer {
       key = ConfigManager.formatKey(str.text);
       return this.generateReplacementText(key, str, config);
     }
+  }
+
+  /**
+   * Convert flat key-value pairs to nested JSON structure
+   * Input: { "landing.address": "Adres", "hello.world.here": "Merhaba Dünya" }
+   * Output: { landing: { address: "Adres" }, hello: { world: { here: "Merhaba Dünya" } } }
+   */
+  private static convertToNestedJson(flatObject: Record<string, string>): Record<string, any> {
+    const result: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(flatObject)) {
+      const keys = key.split('.');
+      let current = result;
+
+      // Navigate/create the nested structure
+      for (let i = 0; i < keys.length - 1; i++) {
+        const currentKey = keys[i];
+        if (!(currentKey in current)) {
+          current[currentKey] = {};
+        }
+        current = current[currentKey];
+      }
+
+      // Set the final value
+      const finalKey = keys[keys.length - 1];
+      current[finalKey] = value;
+    }
+
+    return result;
+  }
+
+  /**
+   * Save batch translations to locale files
+   */
+  private static async saveBatchTranslations(
+    translationsByLanguage: Record<string, Record<string, any>>,
+    currentFileUri: vscode.Uri
+  ): Promise<void> {
+    const localesPath = ConfigManager.getLocalesFullPath(currentFileUri);
+    if (!localesPath) {
+      throw new Error('Could not determine locales path');
+    }
+
+    // Ensure locales directory exists
+    await this.ensureDirectoryExists(localesPath);
+
+    const config = ConfigManager.getConfig();
+
+    // Process each language
+    for (const lang of config.supportedLanguages) {
+      if (!translationsByLanguage[lang]) {
+        continue;
+      }
+
+      const filePath = path.join(localesPath, `${lang}.json`);
+      try {
+        await this.updateLocaleFileWithNested(filePath, translationsByLanguage[lang]);
+      } catch (error) {
+        throw new Error(`Failed to update ${lang}.json: ${error}`);
+      }
+    }
+  }
+
+  /**
+   * Update locale file with nested translation data
+   */
+  private static async updateLocaleFileWithNested(
+    filePath: string,
+    newTranslations: Record<string, any>
+  ): Promise<void> {
+    const fs = require('fs').promises;
+    
+    let existingTranslations: Record<string, any> = {};
+
+    // Read existing file if it exists
+    try {
+      const content = await fs.readFile(filePath, 'utf8');
+      existingTranslations = JSON.parse(content);
+    } catch (error) {
+      // File doesn't exist or is invalid, start with empty object
+      console.log(`Creating new locale file: ${filePath}`);
+    }
+
+    // Merge new translations with existing ones
+    const mergedTranslations = this.deepMerge(existingTranslations, newTranslations);
+
+    // Write back to file with pretty formatting
+    await fs.writeFile(filePath, JSON.stringify(mergedTranslations, null, 2), 'utf8');
+  }
+
+  /**
+   * Deep merge two objects
+   */
+  private static deepMerge(target: any, source: any): any {
+    const result = { ...target };
+
+    for (const key in source) {
+      if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+        result[key] = this.deepMerge(target[key] || {}, source[key]);
+      } else {
+        result[key] = source[key];
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Ensure directory exists, create if it doesn't
+   */
+  private static async ensureDirectoryExists(dirPath: string): Promise<void> {
+    const fs = require('fs');
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+  }
+
+  /**
+   * Convert translationsByLanguage object to TranslationEntry array
+   * Input: { "en": { "landing": { "address": "Address" } }, "tr": { "landing": { "address": "Adres" } } }
+   * Output: [{ key: "landing.address", translations: { "en": "Address", "tr": "Adres" } }]
+   */
+  private static convertToTranslationEntries(
+    translationsByLanguage: Record<string, Record<string, any>>
+  ): TranslationEntry[] {
+    const translationEntries: TranslationEntry[] = [];
+    const flatKeys = new Set<string>();
+
+    // First, collect all possible keys from all languages
+    for (const [lang, translations] of Object.entries(translationsByLanguage)) {
+      const flattenedKeys = this.flattenObject(translations);
+      Object.keys(flattenedKeys).forEach(key => flatKeys.add(key));
+    }
+
+    // Then, create TranslationEntry for each key
+    for (const key of flatKeys) {
+      const translations: Record<string, string> = {};
+
+      // For each language, get the translation for this key
+      for (const [lang, langTranslations] of Object.entries(translationsByLanguage)) {
+        const flattenedTranslations = this.flattenObject(langTranslations);
+        translations[lang] = flattenedTranslations[key] || '';
+      }
+
+      translationEntries.push({
+        key,
+        translations
+      });
+    }
+
+    return translationEntries;
+  }
+
+  /**
+   * Flatten nested object to dot notation
+   * Input: { "landing": { "address": "Address", "title": "Title" }, "home": "Home" }
+   * Output: { "landing.address": "Address", "landing.title": "Title", "home": "Home" }
+   */
+  private static flattenObject(obj: Record<string, any>, prefix: string = ''): Record<string, string> {
+    const flattened: Record<string, string> = {};
+
+    for (const [key, value] of Object.entries(obj)) {
+      const newKey = prefix ? `${prefix}.${key}` : key;
+
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        // Recursively flatten nested objects
+        Object.assign(flattened, this.flattenObject(value, newKey));
+      } else {
+        // It's a primitive value, add it to flattened object
+        flattened[newKey] = String(value);
+      }
+    }
+
+    return flattened;
   }
 }
