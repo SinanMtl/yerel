@@ -1,30 +1,26 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
-import { StringDetector } from './stringDetector';
-import { ConfigManager } from './configManager';
+import { DocumentParser, ExtractedText } from '@sinanmtl/doc-parser';
 import { StringReplacer } from './stringReplacer';
 import { OpenAIService } from './openaiService';
 import { GoogleSheetsService } from './googleSheetsService';
-import { ExtractableString } from './types';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
-
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
 	console.log('Congratulations, your extension "yerel" is now active!');
-
-	const stringDetector = new StringDetector();
+	// Initialize parser
+	const parser = new DocumentParser();
 
 	// Register commands
 	const extractStringsCommand = vscode.commands.registerCommand('yerel.extractStrings', async (uri?: vscode.Uri) => {
 		try {
 			if (uri) {
-				await extractFromFile(uri, stringDetector);
+				await extractFromFile(uri, parser);
 			} else {
-				await extractFromActiveFile(stringDetector);
+				await extractFromActiveFile(parser);
 			}
 		} catch (error) {
 			vscode.window.showErrorMessage(`Yerel: ${error}`);
@@ -33,7 +29,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const extractFromSelectionCommand = vscode.commands.registerCommand('yerel.extractFromSelection', async () => {
 		try {
-			await extractFromSelection(stringDetector);
+			await extractFromSelection();
 		} catch (error) {
 			vscode.window.showErrorMessage(`Yerel: ${error}`);
 		}
@@ -71,7 +67,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-		context.subscriptions.push(
+	context.subscriptions.push(
 		extractStringsCommand,
 		extractFromSelectionCommand,
 		configureSettingsCommand,
@@ -81,39 +77,36 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 }
 
-async function extractFromFile(uri: vscode.Uri, detector: StringDetector) {
-	const document = await vscode.workspace.openTextDocument(uri);
-	const result = detector.detectStrings(document);
-	
-	if (result.strings.length === 0) {
+async function extractFromDocument(document: vscode.TextDocument, parser: DocumentParser) {
+	const extension = '.'+parser.getFileExtension(document.fileName);
+	const result = parser.parseContent(document.getText(), extension);
+	const summary = parser.generateSummary(result ? [result] : []);
+
+	if (summary.allTexts.length === 0) {
 		vscode.window.showInformationMessage('No extractable strings found in this file.');
 		return;
 	}
 
 	// Show preview of found strings
-	await showStringPreview(result.strings, document);
+	await showStringPreview(summary.allTexts, document);
 }
 
-async function extractFromActiveFile(detector: StringDetector) {
+async function extractFromFile(uri: vscode.Uri, parser: DocumentParser) {
+	const document = await vscode.workspace.openTextDocument(uri);
+	extractFromDocument(document, parser);
+}
+
+async function extractFromActiveFile(parser: DocumentParser) {
 	const activeEditor = vscode.window.activeTextEditor;
 	if (!activeEditor) {
 		vscode.window.showWarningMessage('No active file to extract strings from');
 		return;
 	}
-	
-	const document = activeEditor.document;
-	const result = detector.detectStrings(document);
-	
-	if (result.strings.length === 0) {
-		vscode.window.showInformationMessage('No extractable strings found in this file.');
-		return;
-	}
 
-	// Show preview of found strings
-	await showStringPreview(result.strings, document);
+	extractFromDocument(activeEditor.document, parser);
 }
 
-async function extractFromSelection(detector: StringDetector) {
+async function extractFromSelection() {
 	const activeEditor = vscode.window.activeTextEditor;
 	if (!activeEditor) {
 		vscode.window.showWarningMessage('No active editor');
@@ -127,31 +120,40 @@ async function extractFromSelection(detector: StringDetector) {
 	}
 
 	const selectedText = activeEditor.document.getText(selection).trim();
-	
+	const originalStartPosition = activeEditor.document.offsetAt(selection.start);
+	const originalEndPosition = activeEditor.document.offsetAt(selection.end);
+
 	// Create a mock extractable string for the selection
-	const extractableString: ExtractableString = {
+	const extractableString: ExtractedText[] = [{
 		text: selectedText,
-		startPosition: activeEditor.document.offsetAt(selection.start),
-		endPosition: activeEditor.document.offsetAt(selection.end),
+		type: 'string',
+		context: 'javascript', // Default context
 		lineNumber: selection.start.line,
+		startPosition: selection.start.character,
+		endPosition: selection.end.character,
 		columnStart: selection.start.character,
 		columnEnd: selection.end.character,
-		context: 'javascript', // Default context
-		suggestedKey: ConfigManager.formatKey(selectedText)
-	};
+		absoluteStart: originalStartPosition,
+		absoluteEnd: originalEndPosition,
+		originalAbsoluteStart: originalStartPosition,
+		originalAbsoluteEnd: originalEndPosition,
+		originalStartPosition: originalStartPosition,
+		originalEndPosition: originalEndPosition,
+		originalMatch: selectedText
+	}];
 
 	// Show preview for single string
-	await showStringPreview([extractableString], activeEditor.document);
+	await showStringPreview(extractableString, activeEditor.document);
 }
 
-async function showStringPreview(strings: ExtractableString[], document: vscode.TextDocument) {
+async function showStringPreview(strings: ExtractedText[], document: vscode.TextDocument) {
 	// Create quick pick items with preview of replacement
-	const items: vscode.QuickPickItem[] = strings.map((str, index) => {
+	const items: vscode.QuickPickItem[] = strings.map((str) => {
 		const preview = StringReplacer.previewReplacement(str, document.uri);
 		return {
 			label: `"${str.text}"`,
 			description: `→ ${preview}`,
-			detail: `Line ${str.lineNumber + 1} • Context: ${str.context}`,
+			detail: `Line ${(str.lineNumber ?? 0)} • Context: ${str.context}`,
 			picked: true // Pre-select all items
 		};
 	});
@@ -176,7 +178,7 @@ async function showStringPreview(strings: ExtractableString[], document: vscode.
 }
 
 async function openSettings() {
-	await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:yerel');
+	await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:ateam.yerel');
 }
 
 async function testOpenAIConnection() {
